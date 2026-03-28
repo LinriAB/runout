@@ -307,6 +307,12 @@
       const r = await fetch(url, { method: "DELETE" });
       if (!r.ok && r.status !== 204) throw new Error(`${r.status} ${r.statusText}`);
     }
+    async function removeFromCollection(user, token, folderId, releaseId, instanceId) {
+      const url = new URL(API + `/users/${user}/collection/folders/${folderId}/releases/${releaseId}/instances/${instanceId}`);
+      url.searchParams.set("token", token);
+      const r = await fetch(url, { method: "DELETE" });
+      if (!r.ok && r.status !== 204) throw new Error(`${r.status} ${r.statusText}`);
+    }
 
     async function loadFolders(user, token) {
       const d = await dGet(`/users/${user}/collection/folders`, token);
@@ -369,17 +375,18 @@
     }
 
     // ==================== ResultCard ====================
-    function ResultCard({ r, owned, wanted, hideOwned, token, username, folders, fields, defaultFolder, defaultMedia, onAdded, onWanted, onUnwanted, onPrefsUpdate }) {
+    function ResultCard({ r, owned, wanted, hideOwned, collectionInstance, token, username, folders, fields, defaultFolder, defaultMedia, onAdded, onRemoved, onWanted, onUnwanted, onPrefsUpdate }) {
       const [showForm, setShowForm] = useState(false);
       const [adding, setAdding] = useState(false);
       const [added, setAdded] = useState(false);
       const [addingWant, setAddingWant] = useState(false);
       const [addedWant, setAddedWant] = useState(false);
+      const [removed, setRemoved] = useState(false);
       const [folderId, setFolderId] = useState(defaultFolder || '1');
       const [mediaCond, setMediaCond] = useState(defaultMedia || '');
       const [sleeveCond, setSleeveCond] = useState('');
       const [notes, setNotes] = useState('');
-      const isOwned = owned || added;
+      const isOwned = (owned || added) && !removed;
       const isWanted = wanted || addedWant;
       const formats = [...new Set(r.format || [])];
 
@@ -425,6 +432,16 @@
         setAddingWant(false);
       };
 
+      const handleRemoveFromCollection = async () => {
+        if (!collectionInstance) return;
+        if (!confirm(`Ta bort "${r.title}" från din collection?`)) return;
+        try {
+          await removeFromCollection(username, token, collectionInstance.folder_id, r.id, collectionInstance.instance_id);
+          setRemoved(true);
+          onRemoved?.(r.id, collectionInstance.instance_id);
+        } catch (e) { alert("Kunde inte ta bort: " + e.message); }
+      };
+
       return (
         <div className={`card result-card ${isOwned && !hideOwned ? 'owned' : ''}`}>
           <div className="result-top">
@@ -438,7 +455,8 @@
                 </div>
                 <div style={{display:'flex',gap:4,flexShrink:0}}>
                   {isWanted && !isOwned && <span className="wanted-badge" style={{cursor:'pointer'}} onClick={handleRemoveWant} title="Klicka för att ta bort från wantlist">ÖNSKAD ✕</span>}
-                  {isOwned && !hideOwned && <span className="owned-badge">ÄGD</span>}
+                  {isOwned && !hideOwned && collectionInstance && <span className="owned-badge" style={{cursor:'pointer'}} onClick={handleRemoveFromCollection} title="Klicka för att ta bort från collection">ÄGD ✕</span>}
+                  {isOwned && !hideOwned && !collectionInstance && <span className="owned-badge">ÄGD</span>}
                 </div>
               </div>
               <div className="format-badges">
@@ -452,6 +470,9 @@
           <div className="result-actions">
             {!isOwned && token && username && !showForm && (
               <button className="btn-add" onClick={() => setShowForm(true)}>+ Lägg till i collection</button>
+            )}
+            {isOwned && hideOwned && collectionInstance && (
+              <button className="btn-add" style={{flex:'none',background:'#dc2626'}} onClick={handleRemoveFromCollection}>Ta bort</button>
             )}
             {!isOwned && !isWanted && token && username && (
               <button className="btn-want" onClick={handleAddWant} disabled={addingWant}>{addingWant ? 'Lägger till...' : '♡ Want'}</button>
@@ -724,11 +745,19 @@
       };
 
       const onAdded = (id) => setCollectionIds(prev => new Set([...prev, id]));
+      const onRemoved = (id, instanceId) => {
+        setCollectionIds(prev => { const s = new Set(prev); s.delete(id); return s; });
+        setCollectionRaw(prev => prev.filter(item => item.instance_id !== instanceId));
+      };
       const onWanted = (id) => setWantlistIds(prev => new Set([...prev, id]));
       const onUnwanted = (id) => {
         setWantlistIds(prev => { const s = new Set(prev); s.delete(id); return s; });
         setWantlistRaw(prev => prev.filter(w => w.id !== id));
       };
+
+      // Lookup: release id → collection instance (for removal)
+      const collectionMap = {};
+      collectionRaw.forEach(item => { if (!collectionMap[item.basic_information.id]) collectionMap[item.basic_information.id] = item; });
 
       // Split: local matches shown on top, API results without owned duplicates below
       const apiIds = new Set(apiResults.map(r => r.id));
@@ -866,9 +895,9 @@
                             </div>
                             {uniqueLocal.map(item => <CollectionCard key={item.instance_id} item={item} />)}
                             {allOwnedApi.map(r => (
-                              <ResultCard key={r.id} r={r} owned={true} wanted={wantlistIds.has(r.id)} token={token} username={username}
+                              <ResultCard key={r.id} r={r} owned={true} wanted={wantlistIds.has(r.id)} collectionInstance={collectionMap[r.id]} token={token} username={username}
                                 folders={folders} fields={fields} defaultFolder={lastFolder} defaultMedia={lastMedia}
-                                onAdded={onAdded} onWanted={onWanted} onUnwanted={onUnwanted} onPrefsUpdate={handlePrefsUpdate} />
+                                onAdded={onAdded} onRemoved={onRemoved} onWanted={onWanted} onUnwanted={onUnwanted} onPrefsUpdate={handlePrefsUpdate} />
                             ))}
                           </>
                         )}
@@ -885,7 +914,7 @@
                             {apiNotOwned.map(r => (
                               <ResultCard key={r.id} r={r} owned={false} wanted={wantlistIds.has(r.id)} token={token} username={username}
                                 folders={folders} fields={fields} defaultFolder={lastFolder} defaultMedia={lastMedia}
-                                onAdded={onAdded} onWanted={onWanted} onUnwanted={onUnwanted} onPrefsUpdate={handlePrefsUpdate} />
+                                onAdded={onAdded} onRemoved={onRemoved} onWanted={onWanted} onUnwanted={onUnwanted} onPrefsUpdate={handlePrefsUpdate} />
                             ))}
                           </>
                         )}
@@ -931,9 +960,9 @@
                       {collSlice.map(item => {
                         const r = itemToResult(item);
                         return (
-                          <ResultCard key={item.instance_id} r={r} owned={true} hideOwned={true} wanted={wantlistIds.has(r.id)} token={token} username={username}
+                          <ResultCard key={item.instance_id} r={r} owned={true} hideOwned={true} collectionInstance={item} wanted={wantlistIds.has(r.id)} token={token} username={username}
                             folders={folders} fields={fields} defaultFolder={lastFolder} defaultMedia={lastMedia}
-                            onAdded={onAdded} onWanted={onWanted} onUnwanted={onUnwanted} onPrefsUpdate={handlePrefsUpdate} />
+                            onAdded={onAdded} onRemoved={onRemoved} onWanted={onWanted} onUnwanted={onUnwanted} onPrefsUpdate={handlePrefsUpdate} />
                         );
                       })}
                       {collectionRaw.length === 0 && (
@@ -971,9 +1000,9 @@
                       {wantSlice.map(w => {
                         const r = itemToResult(w);
                         return (
-                          <ResultCard key={r.id} r={r} owned={collectionIds.has(r.id)} wanted={true} token={token} username={username}
+                          <ResultCard key={r.id} r={r} owned={collectionIds.has(r.id)} wanted={true} collectionInstance={collectionMap[r.id]} token={token} username={username}
                             folders={folders} fields={fields} defaultFolder={lastFolder} defaultMedia={lastMedia}
-                            onAdded={onAdded} onWanted={onWanted} onUnwanted={onUnwanted} onPrefsUpdate={handlePrefsUpdate} />
+                            onAdded={onAdded} onRemoved={onRemoved} onWanted={onWanted} onUnwanted={onUnwanted} onPrefsUpdate={handlePrefsUpdate} />
                         );
                       })}
                       {wantlistRaw.length === 0 && (
