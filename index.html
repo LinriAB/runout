@@ -913,9 +913,15 @@
 
                 {/* ==================== Wantlist view ==================== */}
                 {activeView === 'wantlist' && (() => {
-                  const wantPages = Math.ceil(wantlistRaw.length / WANTLIST_PAGE_SIZE) || 1;
+                  const wantSorted = [...wantlistRaw].sort((a, b) => {
+                    const aInfo = a.basic_information, bInfo = b.basic_information;
+                    const aStr = ((aInfo.artists || []).map(x => x.name).join(', ') + ' ' + aInfo.title).toLowerCase();
+                    const bStr = ((bInfo.artists || []).map(x => x.name).join(', ') + ' ' + bInfo.title).toLowerCase();
+                    return aStr.localeCompare(bStr);
+                  });
+                  const wantPages = Math.ceil(wantSorted.length / WANTLIST_PAGE_SIZE) || 1;
                   const wantPage = Math.min(page, wantPages);
-                  const wantSlice = wantlistRaw.slice((wantPage - 1) * WANTLIST_PAGE_SIZE, wantPage * WANTLIST_PAGE_SIZE);
+                  const wantSlice = wantSorted.slice((wantPage - 1) * WANTLIST_PAGE_SIZE, wantPage * WANTLIST_PAGE_SIZE);
                   return (
                     <>
                       {wantlistRaw.length > 0 && (
