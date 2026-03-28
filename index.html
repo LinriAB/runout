@@ -159,6 +159,16 @@
     .spinner { display: inline-block; width: 16px; height: 16px; border: 2px solid #ddd; border-top-color: #4f46e5; border-radius: 50%; animation: spin 0.6s linear infinite; vertical-align: middle; margin-right: 6px; }
     @keyframes spin { to { transform: rotate(360deg); } }
 
+    .wanted-badge {
+      background: #fef3c7; color: #b45309; font-size: 11px; font-weight: 700;
+      padding: 2px 8px; border-radius: 20px; white-space: nowrap; flex-shrink: 0;
+    }
+    .btn-want {
+      flex: 1; border: 1.5px solid #fcd34d; background: #fffbeb; color: #b45309; border-radius: 8px;
+      padding: 8px; font-size: 12px; font-weight: 600; cursor: pointer;
+    }
+    .btn-want:disabled { opacity: 0.5; cursor: not-allowed; }
+
     .coll-meta { font-size: 11px; color: #aaa; margin-top: 4px; }
   </style>
 </head>
@@ -178,6 +188,8 @@
     const PREFS_KEY = "skivjansen_prefs";
     const COLLECTION_KEY = "skivjansen_collection";
     const COLLECTION_META_KEY = "skivjansen_collection_meta";
+    const WANTLIST_KEY = "skivjansen_wantlist";
+    const WANTLIST_META_KEY = "skivjansen_wantlist_meta";
 
     function saveSettings(token, username) {
       try { localStorage.setItem(SETTINGS_KEY, JSON.stringify({ token, username })); } catch(e) {}
@@ -186,7 +198,7 @@
       try { return JSON.parse(localStorage.getItem(SETTINGS_KEY)) || {}; } catch(e) { return {}; }
     }
     function clearAllData() {
-      try { [SETTINGS_KEY, PREFS_KEY, COLLECTION_KEY, COLLECTION_META_KEY].forEach(k => localStorage.removeItem(k)); } catch(e) {}
+      try { [SETTINGS_KEY, PREFS_KEY, COLLECTION_KEY, COLLECTION_META_KEY, WANTLIST_KEY, WANTLIST_META_KEY].forEach(k => localStorage.removeItem(k)); } catch(e) {}
     }
     function savePrefs(prefs) {
       try { localStorage.setItem(PREFS_KEY, JSON.stringify(prefs)); } catch(e) {}
@@ -205,6 +217,21 @@
         const meta = JSON.parse(localStorage.getItem(COLLECTION_META_KEY));
         if (!meta || meta.username !== username) return null;
         const items = JSON.parse(localStorage.getItem(COLLECTION_KEY));
+        return { items, ts: meta.ts, count: meta.count };
+      } catch(e) { return null; }
+    }
+
+    function saveCachedWantlist(items, username) {
+      try {
+        localStorage.setItem(WANTLIST_KEY, JSON.stringify(items));
+        localStorage.setItem(WANTLIST_META_KEY, JSON.stringify({ username, ts: Date.now(), count: items.length }));
+      } catch(e) { console.warn('Wantlist cache full:', e.message); }
+    }
+    function loadCachedWantlist(username) {
+      try {
+        const meta = JSON.parse(localStorage.getItem(WANTLIST_META_KEY));
+        if (!meta || meta.username !== username) return null;
+        const items = JSON.parse(localStorage.getItem(WANTLIST_KEY));
         return { items, ts: meta.ts, count: meta.count };
       } catch(e) { return null; }
     }
@@ -246,6 +273,25 @@
         await new Promise(r => setTimeout(r, 350));
       }
       return all;
+    }
+
+    async function loadWantlistFromAPI(user, token) {
+      let page = 1, all = [];
+      while (true) {
+        const d = await dGet(`/users/${user}/wants`, token, { page, per_page: 100 });
+        (d.wants || []).forEach(w => all.push(w));
+        if (page >= (d.pagination?.pages || 1)) break;
+        page++;
+        await new Promise(r => setTimeout(r, 350));
+      }
+      return all;
+    }
+    async function addToWantlist(user, token, releaseId) {
+      const url = new URL(API + `/users/${user}/wants/${releaseId}`);
+      url.searchParams.set("token", token);
+      const r = await fetch(url, { method: "PUT", headers: { 'Content-Type': 'application/json' } });
+      if (!r.ok) throw new Error(`${r.status} ${r.statusText}`);
+      return r.json();
     }
 
     async function loadFolders(user, token) {
@@ -309,15 +355,18 @@
     }
 
     // ==================== ResultCard ====================
-    function ResultCard({ r, owned, token, username, folders, fields, defaultFolder, defaultMedia, onAdded, onPrefsUpdate }) {
+    function ResultCard({ r, owned, wanted, token, username, folders, fields, defaultFolder, defaultMedia, onAdded, onWanted, onPrefsUpdate }) {
       const [showForm, setShowForm] = useState(false);
       const [adding, setAdding] = useState(false);
       const [added, setAdded] = useState(false);
+      const [addingWant, setAddingWant] = useState(false);
+      const [addedWant, setAddedWant] = useState(false);
       const [folderId, setFolderId] = useState(defaultFolder || '1');
       const [mediaCond, setMediaCond] = useState(defaultMedia || '');
       const [sleeveCond, setSleeveCond] = useState('');
       const [notes, setNotes] = useState('');
       const isOwned = owned || added;
+      const isWanted = wanted || addedWant;
       const formats = [...new Set(r.format || [])];
 
       const mediaField = fields.find(f => f.name === 'Media Condition');
@@ -342,6 +391,16 @@
         setAdding(false);
       };
 
+      const handleAddWant = async () => {
+        setAddingWant(true);
+        try {
+          await addToWantlist(username, token, r.id);
+          setAddedWant(true);
+          onWanted?.(r.id);
+        } catch (e) { alert("Kunde inte lägga till i wantlist: " + e.message); }
+        setAddingWant(false);
+      };
+
       return (
         <div className={`card result-card ${isOwned ? 'owned' : ''}`}>
           <div className="result-top">
@@ -353,7 +412,10 @@
                   {r.catno && r.catno !== 'none' && <div className="result-catno">Cat# {r.catno}</div>}
                   {r.label?.length > 0 && <div className="result-label">{r.label.filter(l=>l!=='Not On Label').join(', ')}</div>}
                 </div>
-                {isOwned && <span className="owned-badge">ÄGD</span>}
+                <div style={{display:'flex',gap:4,flexShrink:0}}>
+                  {isWanted && !isOwned && <span className="wanted-badge">ÖNSKAD</span>}
+                  {isOwned && <span className="owned-badge">ÄGD</span>}
+                </div>
               </div>
               <div className="format-badges">
                 {formats.map(f => <span key={f} className={`format-badge ${fmtClass(f)}`}>{f}</span>)}
@@ -366,6 +428,9 @@
           <div className="result-actions">
             {!isOwned && token && username && !showForm && (
               <button className="btn-add" onClick={() => setShowForm(true)}>+ Lägg till i collection</button>
+            )}
+            {!isOwned && !isWanted && token && username && (
+              <button className="btn-want" onClick={handleAddWant} disabled={addingWant}>{addingWant ? 'Lägger till...' : '♡ Want'}</button>
             )}
             <a className="btn-discogs" href={`https://www.discogs.com${r.uri || '/release/'+r.id}`} target="_blank" rel="noopener">Visa på Discogs ↗</a>
           </div>
@@ -455,6 +520,7 @@
       const [folders, setFolders] = useState([]);
       const [fields, setFields] = useState([]);
       const [cacheInfo, setCacheInfo] = useState(null);
+      const [wantlistIds, setWantlistIds] = useState(new Set());
 
       const [query, setQuery] = useState('');
       const [searchType, setSearchType] = useState('catno');
@@ -508,6 +574,15 @@
           const [uf, ufi] = await Promise.all([loadFolders(un, tk), loadFields(un, tk)]);
           setFolders(uf.length > 0 ? uf : [{ id: 1, name: 'Uncategorized', count: 0 }]);
           setFields(ufi);
+          // Load wantlist
+          const cachedWants = !forceRefresh && loadCachedWantlist(un);
+          if (cachedWants && cachedWants.items) {
+            setWantlistIds(new Set(cachedWants.items.map(w => w.id)));
+          } else {
+            const wants = await loadWantlistFromAPI(un, tk);
+            setWantlistIds(new Set(wants.map(w => w.id)));
+            saveCachedWantlist(wants, un);
+          }
           setConnected(true);
           setSettingsOpen(false);
           saveSettings(tk, un);
@@ -519,6 +594,7 @@
 
       const handleDisconnect = () => {
         setConnected(false); setCollectionRaw([]); setCollectionIds(new Set());
+        setWantlistIds(new Set());
         setFolders([]); setFields([]); setToken(''); setUsername('');
         setCacheInfo(null); clearAllData(); setSettingsOpen(true);
       };
@@ -602,6 +678,7 @@
       };
 
       const onAdded = (id) => setCollectionIds(prev => new Set([...prev, id]));
+      const onWanted = (id) => setWantlistIds(prev => new Set([...prev, id]));
 
       // Split: local matches shown on top, API results without owned duplicates below
       const apiIds = new Set(apiResults.map(r => r.id));
@@ -729,9 +806,9 @@
                         </div>
                         {uniqueLocal.map(item => <CollectionCard key={item.instance_id} item={item} />)}
                         {allOwnedApi.map(r => (
-                          <ResultCard key={r.id} r={r} owned={true} token={token} username={username}
+                          <ResultCard key={r.id} r={r} owned={true} wanted={wantlistIds.has(r.id)} token={token} username={username}
                             folders={folders} fields={fields} defaultFolder={lastFolder} defaultMedia={lastMedia}
-                            onAdded={onAdded} onPrefsUpdate={handlePrefsUpdate} />
+                            onAdded={onAdded} onWanted={onWanted} onPrefsUpdate={handlePrefsUpdate} />
                         ))}
                       </>
                     )}
@@ -746,9 +823,9 @@
                           </div>
                         )}
                         {apiNotOwned.map(r => (
-                          <ResultCard key={r.id} r={r} owned={false} token={token} username={username}
+                          <ResultCard key={r.id} r={r} owned={false} wanted={wantlistIds.has(r.id)} token={token} username={username}
                             folders={folders} fields={fields} defaultFolder={lastFolder} defaultMedia={lastMedia}
-                            onAdded={onAdded} onPrefsUpdate={handlePrefsUpdate} />
+                            onAdded={onAdded} onWanted={onWanted} onPrefsUpdate={handlePrefsUpdate} />
                         ))}
                       </>
                     )}
