@@ -1,0 +1,796 @@
+<!DOCTYPE html>
+<html lang="sv">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no" />
+  <meta name="apple-mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+  <meta name="theme-color" content="#4f46e5" />
+  <link rel="manifest" href="manifest.json" />
+  <link rel="apple-touch-icon" href="icon-192.png" />
+  <title>Skivjansen</title>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/react/18.2.0/umd/react.production.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/react-dom/18.2.0/umd/react-dom.production.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/babel-standalone/7.23.9/babel.min.js"></script>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; background: #f5f5f7; color: #1d1d1f; -webkit-tap-highlight-color: transparent; }
+
+    .header { background: linear-gradient(135deg, #4f46e5, #6366f1); color: white; padding: 16px 20px; box-shadow: 0 2px 12px rgba(79,70,229,0.3); position: sticky; top: 0; z-index: 100; }
+    .header h1 { font-size: 22px; font-weight: 700; letter-spacing: -0.5px; }
+    .header-row { display: flex; justify-content: space-between; align-items: center; }
+    .header p { font-size: 12px; opacity: 0.7; margin-top: 2px; }
+    .header-badge { font-size: 10px; background: rgba(255,255,255,0.2); padding: 3px 8px; border-radius: 10px; }
+
+    .container { max-width: 500px; margin: 0 auto; padding: 16px; padding-bottom: 80px; }
+
+    .card { background: white; border-radius: 14px; border: 1px solid #e5e5ea; box-shadow: 0 1px 3px rgba(0,0,0,0.06); margin-bottom: 12px; overflow: hidden; }
+
+    .settings-toggle { width: 100%; display: flex; align-items: center; justify-content: space-between; padding: 14px 16px; border: none; background: none; cursor: pointer; font-size: 14px; font-weight: 600; color: #555; }
+    .settings-toggle .arrow { transition: transform 0.2s; font-size: 11px; color: #999; }
+    .settings-toggle .arrow.open { transform: rotate(180deg); }
+    .settings-body { padding: 0 16px 16px; border-top: 1px solid #f0f0f0; padding-top: 14px; }
+
+    label { display: block; font-size: 11px; font-weight: 600; color: #888; margin-bottom: 4px; text-transform: uppercase; letter-spacing: 0.5px; }
+
+    input[type="text"], input[type="password"], select, textarea {
+      width: 100%; border: 1.5px solid #ddd; border-radius: 10px; padding: 10px 14px;
+      font-size: 16px; outline: none; transition: border-color 0.2s; background: white;
+      font-family: inherit; -webkit-appearance: none;
+    }
+    textarea { resize: vertical; min-height: 60px; }
+    input:focus, select:focus, textarea:focus { border-color: #6366f1; box-shadow: 0 0 0 3px rgba(99,102,241,0.12); }
+
+    .field { margin-bottom: 12px; }
+
+    .btn-primary {
+      width: 100%; background: #4f46e5; color: white; border: none; border-radius: 10px;
+      padding: 11px; font-size: 14px; font-weight: 600; cursor: pointer; transition: background 0.2s;
+    }
+    .btn-primary:hover { background: #4338ca; }
+    .btn-primary:disabled { opacity: 0.4; cursor: not-allowed; }
+
+    .btn-danger {
+      width: 100%; background: white; color: #dc2626; border: 1.5px solid #fecaca; border-radius: 10px;
+      padding: 9px; font-size: 13px; font-weight: 600; cursor: pointer; margin-top: 8px;
+    }
+    .btn-secondary {
+      width: 100%; background: white; color: #4f46e5; border: 1.5px solid #c7d2fe; border-radius: 10px;
+      padding: 9px; font-size: 13px; font-weight: 600; cursor: pointer; margin-top: 8px;
+    }
+
+    .connected-msg { text-align: center; font-size: 12px; color: #22c55e; margin-top: 8px; }
+    .cache-msg { text-align: center; font-size: 11px; color: #888; margin-top: 4px; }
+
+    /* Search */
+    .search-tabs { display: flex; gap: 6px; margin-bottom: 10px; }
+    .search-tab {
+      padding: 6px 14px; border-radius: 20px; border: none; font-size: 12px; font-weight: 600;
+      cursor: pointer; transition: all 0.2s;
+    }
+    .search-tab.active { background: #4f46e5; color: white; }
+    .search-tab:not(.active) { background: #e5e5ea; color: #666; }
+
+    .search-row { display: flex; gap: 8px; margin-bottom: 12px; }
+    .search-row input { flex: 1; }
+    .search-row button {
+      padding: 0 20px; background: #4f46e5; color: white; border: none; border-radius: 10px;
+      font-size: 14px; font-weight: 600; cursor: pointer; white-space: nowrap;
+    }
+    .search-row button:disabled { opacity: 0.4; cursor: not-allowed; }
+
+    /* Filters */
+    .filters { display: flex; gap: 6px; margin-bottom: 14px; flex-wrap: wrap; }
+    .filters select { width: auto; flex: 1; min-width: 0; font-size: 12px; padding: 7px 10px; border-radius: 8px; }
+    .filter-active { border-color: #4f46e5 !important; background: #f0f0ff !important; }
+
+    /* Section divider */
+    .section-label { font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.8px; padding: 10px 0 6px; display: flex; align-items: center; gap: 8px; }
+    .section-label.owned { color: #16a34a; }
+    .section-label.discogs { color: #4f46e5; }
+    .section-label .line { flex: 1; height: 1px; background: #e5e5ea; }
+
+    /* Result cards */
+    .result-card { padding: 14px 16px; }
+    .result-card.owned { background: #f0fdf4; border-color: #86efac; }
+
+    .result-top { display: flex; gap: 12px; }
+    .result-img { width: 60px; height: 60px; border-radius: 10px; object-fit: cover; flex-shrink: 0; }
+    .result-info { flex: 1; min-width: 0; }
+    .result-header { display: flex; justify-content: space-between; align-items: flex-start; gap: 8px; }
+    .result-title { font-size: 14px; font-weight: 700; color: #1d1d1f; line-height: 1.3; }
+    .result-title-wrap { overflow: hidden; text-overflow: ellipsis; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; }
+    .result-catno { font-size: 11px; color: #888; margin-top: 1px; }
+    .result-label { font-size: 11px; color: #888; }
+
+    .owned-badge {
+      background: #dcfce7; color: #16a34a; font-size: 11px; font-weight: 700;
+      padding: 2px 8px; border-radius: 20px; white-space: nowrap; flex-shrink: 0;
+    }
+
+    .format-badges { display: flex; flex-wrap: wrap; gap: 4px; margin-top: 8px; align-items: center; }
+    .format-badge { font-size: 10px; font-weight: 600; padding: 2px 8px; border-radius: 20px; color: white; }
+    .format-badge.vinyl { background: #1f2937; }
+    .format-badge.cd { background: #2563eb; }
+    .format-badge.cassette { background: #b45309; }
+    .format-badge.other { background: #6b7280; }
+    .meta-text { font-size: 11px; color: #aaa; }
+
+    .result-actions { display: flex; gap: 8px; margin-top: 12px; }
+    .btn-add {
+      flex: 1; background: #4f46e5; color: white; border: none; border-radius: 8px;
+      padding: 8px; font-size: 12px; font-weight: 600; cursor: pointer;
+    }
+    .btn-add:disabled { opacity: 0.5; }
+    .btn-discogs {
+      flex: 1; border: 1.5px solid #ddd; background: white; color: #555; border-radius: 8px;
+      padding: 8px; font-size: 12px; font-weight: 600; cursor: pointer; text-decoration: none; text-align: center;
+    }
+
+    /* Add form */
+    .add-form { border-top: 1px solid #f0f0f0; padding: 14px 0 4px; margin-top: 12px; }
+    .add-form-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-bottom: 10px; }
+    .add-form-grid .field { margin-bottom: 0; }
+    .add-form-full { margin-bottom: 10px; }
+    .add-form-actions { display: flex; gap: 8px; }
+    .btn-confirm {
+      flex: 1; background: #16a34a; color: white; border: none; border-radius: 8px;
+      padding: 9px; font-size: 13px; font-weight: 600; cursor: pointer;
+    }
+    .btn-confirm:disabled { opacity: 0.5; }
+    .btn-cancel {
+      padding: 9px 16px; border: 1.5px solid #ddd; background: white; color: #666; border-radius: 8px;
+      font-size: 13px; cursor: pointer;
+    }
+
+    .pagination { display: flex; justify-content: center; gap: 8px; margin: 16px 0 32px; }
+    .pagination button {
+      padding: 8px 18px; border: 1.5px solid #ddd; border-radius: 8px; background: white;
+      font-size: 13px; cursor: pointer;
+    }
+    .pagination button:disabled { opacity: 0.3; cursor: not-allowed; }
+
+    .empty-state { text-align: center; padding: 48px 16px; color: #aaa; }
+    .empty-state .icon { font-size: 40px; margin-bottom: 12px; }
+    .empty-state p { font-size: 13px; }
+
+    .hit-count { font-size: 12px; color: #999; margin-bottom: 10px; }
+    .error-msg { background: #fef2f2; border: 1px solid #fecaca; color: #dc2626; border-radius: 10px; padding: 10px 14px; font-size: 13px; margin-bottom: 12px; }
+    .spinner { display: inline-block; width: 16px; height: 16px; border: 2px solid #ddd; border-top-color: #4f46e5; border-radius: 50%; animation: spin 0.6s linear infinite; vertical-align: middle; margin-right: 6px; }
+    @keyframes spin { to { transform: rotate(360deg); } }
+
+    .coll-meta { font-size: 11px; color: #aaa; margin-top: 4px; }
+  </style>
+</head>
+<body>
+  <div id="root"></div>
+  <script type="text/babel">
+    const { useState, useEffect } = React;
+
+    const API = "https://api.discogs.com";
+    const CONDITIONS = [
+      'Mint (M)', 'Near Mint (NM or M-)', 'Very Good Plus (VG+)',
+      'Very Good (VG)', 'Good Plus (G+)', 'Good (G)', 'Fair (F)', 'Poor (P)'
+    ];
+
+    // ==================== Persistence ====================
+    const SETTINGS_KEY = "skivjansen_settings";
+    const PREFS_KEY = "skivjansen_prefs";
+    const COLLECTION_KEY = "skivjansen_collection";
+    const COLLECTION_META_KEY = "skivjansen_collection_meta";
+
+    function saveSettings(token, username) {
+      try { localStorage.setItem(SETTINGS_KEY, JSON.stringify({ token, username })); } catch(e) {}
+    }
+    function loadSettings() {
+      try { return JSON.parse(localStorage.getItem(SETTINGS_KEY)) || {}; } catch(e) { return {}; }
+    }
+    function clearAllData() {
+      try { [SETTINGS_KEY, PREFS_KEY, COLLECTION_KEY, COLLECTION_META_KEY].forEach(k => localStorage.removeItem(k)); } catch(e) {}
+    }
+    function savePrefs(prefs) {
+      try { localStorage.setItem(PREFS_KEY, JSON.stringify(prefs)); } catch(e) {}
+    }
+    function loadPrefs() {
+      try { return JSON.parse(localStorage.getItem(PREFS_KEY)) || {}; } catch(e) { return {}; }
+    }
+    function saveCachedCollection(items, username) {
+      try {
+        localStorage.setItem(COLLECTION_KEY, JSON.stringify(items));
+        localStorage.setItem(COLLECTION_META_KEY, JSON.stringify({ username, ts: Date.now(), count: items.length }));
+      } catch(e) { console.warn('Cache full:', e.message); }
+    }
+    function loadCachedCollection(username) {
+      try {
+        const meta = JSON.parse(localStorage.getItem(COLLECTION_META_KEY));
+        if (!meta || meta.username !== username) return null;
+        const items = JSON.parse(localStorage.getItem(COLLECTION_KEY));
+        return { items, ts: meta.ts, count: meta.count };
+      } catch(e) { return null; }
+    }
+
+    // ==================== API ====================
+    async function dGet(path, token, params = {}) {
+      const url = new URL(API + path);
+      Object.entries(params).forEach(([k, v]) => { if (v) url.searchParams.set(k, String(v)); });
+      url.searchParams.set("token", token);
+      const r = await fetch(url);
+      if (!r.ok) throw new Error(`${r.status} ${r.statusText}`);
+      return r.json();
+    }
+    async function dPost(path, token, body) {
+      const url = new URL(API + path);
+      url.searchParams.set("token", token);
+      const opts = { method: "POST" };
+      if (body) { opts.headers = { 'Content-Type': 'application/json' }; opts.body = JSON.stringify(body); }
+      const r = await fetch(url, opts);
+      if (!r.ok) throw new Error(`${r.status} ${r.statusText}`);
+      return r.json();
+    }
+    async function dPostField(path, token, value) {
+      const url = new URL(API + path);
+      url.searchParams.set("token", token);
+      const r = await fetch(url, { method: "POST", headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ value }) });
+      if (!r.ok && r.status !== 204) throw new Error(`${r.status} ${r.statusText}`);
+    }
+
+    async function loadCollectionFromAPI(user, token, cb) {
+      let page = 1, all = [], total = 0;
+      while (true) {
+        const d = await dGet(`/users/${user}/collection/folders/0/releases`, token, { page, per_page: 100, sort: 'artist', sort_order: 'asc' });
+        total = d.pagination?.items || 0;
+        (d.releases || []).forEach(r => all.push(r));
+        cb?.(all.length, total);
+        if (page >= (d.pagination?.pages || 1)) break;
+        page++;
+        await new Promise(r => setTimeout(r, 350));
+      }
+      return all;
+    }
+
+    async function loadFolders(user, token) {
+      const d = await dGet(`/users/${user}/collection/folders`, token);
+      return (d.folders || []).filter(f => f.id !== 0);
+    }
+    async function loadFields(user, token) {
+      const d = await dGet(`/users/${user}/collection/fields`, token);
+      return d.fields || [];
+    }
+
+    // ==================== Helpers ====================
+    function fmtClass(f) {
+      const fl = f.toLowerCase();
+      if (fl.includes('vinyl') || fl.includes('lp') || fl.includes('"')) return 'vinyl';
+      if (fl.includes('cd')) return 'cd';
+      if (fl.includes('cassette')) return 'cassette';
+      return 'other';
+    }
+
+    function extractFilterOptions(results) {
+      const years = new Set(), countries = new Set(), formats = new Set();
+      results.forEach(r => {
+        if (r.year && r.year !== '0') years.add(r.year);
+        if (r.country) countries.add(r.country);
+        (r.format || []).forEach(f => formats.add(f));
+      });
+      return {
+        years: [...years].sort((a, b) => b - a),
+        countries: [...countries].sort(),
+        formats: [...formats].sort()
+      };
+    }
+
+    function timeAgo(ts) {
+      const mins = Math.floor((Date.now() - ts) / 60000);
+      if (mins < 1) return 'just nu';
+      if (mins < 60) return `${mins} min sedan`;
+      const hrs = Math.floor(mins / 60);
+      if (hrs < 24) return `${hrs}h sedan`;
+      return `${Math.floor(hrs / 24)}d sedan`;
+    }
+
+    // Search local collection — returns matching items
+    function searchLocal(collectionRaw, query, searchType) {
+      if (!query.trim()) return [];
+      const q = query.trim().toLowerCase();
+      return collectionRaw.filter(item => {
+        const info = item.basic_information;
+        if (searchType === 'catno') {
+          return (info.labels || []).some(l => l.catno && l.catno.toLowerCase().includes(q));
+        } else if (searchType === 'barcode') {
+          // Barcodes not in basic_information — can't search locally
+          return false;
+        } else {
+          const artists = (info.artists || []).map(a => a.name.toLowerCase()).join(' ');
+          const title = (info.title || '').toLowerCase();
+          return artists.includes(q) || title.includes(q);
+        }
+      });
+    }
+
+    // ==================== ResultCard ====================
+    function ResultCard({ r, owned, token, username, folders, fields, defaultFolder, defaultMedia, onAdded, onPrefsUpdate }) {
+      const [showForm, setShowForm] = useState(false);
+      const [adding, setAdding] = useState(false);
+      const [added, setAdded] = useState(false);
+      const [folderId, setFolderId] = useState(defaultFolder || '1');
+      const [mediaCond, setMediaCond] = useState(defaultMedia || '');
+      const [sleeveCond, setSleeveCond] = useState('');
+      const [notes, setNotes] = useState('');
+      const isOwned = owned || added;
+      const formats = [...new Set(r.format || [])];
+
+      const mediaField = fields.find(f => f.name === 'Media Condition');
+      const sleeveField = fields.find(f => f.name === 'Sleeve Condition');
+      const notesField = fields.find(f => f.name === 'Notes');
+
+      const handleAdd = async () => {
+        setAdding(true);
+        try {
+          const result = await dPost(`/users/${username}/collection/folders/${folderId}/releases/${r.id}`, token);
+          const instanceId = result.instance_id;
+          const updates = [];
+          if (mediaCond && mediaField) updates.push(dPostField(`/users/${username}/collection/folders/${folderId}/releases/${r.id}/instances/${instanceId}/fields/${mediaField.id}`, token, mediaCond));
+          if (sleeveCond && sleeveField) updates.push(dPostField(`/users/${username}/collection/folders/${folderId}/releases/${r.id}/instances/${instanceId}/fields/${sleeveField.id}`, token, sleeveCond));
+          if (notes.trim() && notesField) updates.push(dPostField(`/users/${username}/collection/folders/${folderId}/releases/${r.id}/instances/${instanceId}/fields/${notesField.id}`, token, notes.trim()));
+          if (updates.length > 0) await Promise.all(updates);
+          onPrefsUpdate?.({ lastFolder: folderId, lastMedia: mediaCond });
+          setAdded(true);
+          setShowForm(false);
+          onAdded?.(r.id);
+        } catch (e) { alert("Kunde inte lägga till: " + e.message); }
+        setAdding(false);
+      };
+
+      return (
+        <div className={`card result-card ${isOwned ? 'owned' : ''}`}>
+          <div className="result-top">
+            {r.cover_image && <img src={r.cover_image} className="result-img" alt="" onError={e => e.target.style.display='none'} />}
+            <div className="result-info">
+              <div className="result-header">
+                <div style={{minWidth:0}}>
+                  <div className="result-title result-title-wrap">{r.title}</div>
+                  {r.catno && r.catno !== 'none' && <div className="result-catno">Cat# {r.catno}</div>}
+                  {r.label?.length > 0 && <div className="result-label">{r.label.filter(l=>l!=='Not On Label').join(', ')}</div>}
+                </div>
+                {isOwned && <span className="owned-badge">ÄGD</span>}
+              </div>
+              <div className="format-badges">
+                {formats.map(f => <span key={f} className={`format-badge ${fmtClass(f)}`}>{f}</span>)}
+                {r.year && r.year !== '0' && <span className="meta-text">{r.year}</span>}
+                {r.country && <span className="meta-text">· {r.country}</span>}
+              </div>
+            </div>
+          </div>
+
+          <div className="result-actions">
+            {!isOwned && token && username && !showForm && (
+              <button className="btn-add" onClick={() => setShowForm(true)}>+ Lägg till i collection</button>
+            )}
+            <a className="btn-discogs" href={`https://www.discogs.com${r.uri || '/release/'+r.id}`} target="_blank" rel="noopener">Visa på Discogs ↗</a>
+          </div>
+
+          {showForm && !isOwned && (
+            <div className="add-form">
+              <div className="add-form-grid">
+                <div className="field">
+                  <label>Folder</label>
+                  <select value={folderId} onChange={e => setFolderId(e.target.value)} style={{fontSize:13,padding:'8px 10px'}}>
+                    {folders.map(f => <option key={f.id} value={f.id}>{f.name} ({f.count})</option>)}
+                  </select>
+                </div>
+                <div className="field">
+                  <label>Media Condition</label>
+                  <select value={mediaCond} onChange={e => setMediaCond(e.target.value)} style={{fontSize:13,padding:'8px 10px'}}>
+                    <option value="">— Välj —</option>
+                    {CONDITIONS.map(c => <option key={c} value={c}>{c}</option>)}
+                  </select>
+                </div>
+                <div className="field">
+                  <label>Sleeve Condition</label>
+                  <select value={sleeveCond} onChange={e => setSleeveCond(e.target.value)} style={{fontSize:13,padding:'8px 10px'}}>
+                    <option value="">— Välj —</option>
+                    {CONDITIONS.map(c => <option key={c} value={c}>{c}</option>)}
+                  </select>
+                </div>
+              </div>
+              <div className="add-form-full">
+                <label>Notes</label>
+                <textarea value={notes} onChange={e => setNotes(e.target.value)} placeholder="Valfria anteckningar..." rows="2" style={{fontSize:13}} />
+              </div>
+              <div className="add-form-actions">
+                <button className="btn-confirm" onClick={handleAdd} disabled={adding}>{adding ? 'Lägger till...' : 'Lägg till'}</button>
+                <button className="btn-cancel" onClick={() => setShowForm(false)}>Avbryt</button>
+              </div>
+            </div>
+          )}
+        </div>
+      );
+    }
+
+    // ==================== CollectionCard (for owned items from local search) ====================
+    function CollectionCard({ item }) {
+      const info = item.basic_information;
+      const formats = [...new Set((info.formats || []).flatMap(f => [f.name, ...(f.descriptions || [])]))].filter(Boolean);
+      const labels = (info.labels || []).map(l => `${l.name}${l.catno && l.catno !== 'none' ? ' \u2014 ' + l.catno : ''}`);
+      return (
+        <div className="card result-card owned">
+          <div className="result-top">
+            {info.cover_image && <img src={info.cover_image} className="result-img" alt="" onError={e => e.target.style.display='none'} />}
+            <div className="result-info">
+              <div className="result-header">
+                <div style={{minWidth:0}}>
+                  <div className="result-title result-title-wrap">{(info.artists || []).map(a => a.name).join(', ')} — {info.title}</div>
+                  {labels.length > 0 && <div className="result-catno">{labels.join(' · ')}</div>}
+                </div>
+                <span className="owned-badge">ÄGD</span>
+              </div>
+              <div className="format-badges" style={{marginTop:6}}>
+                {formats.map(f => <span key={f} className={`format-badge ${fmtClass(f)}`}>{f}</span>)}
+                {info.year > 0 && <span className="meta-text">{info.year}</span>}
+              </div>
+            </div>
+          </div>
+          <div className="result-actions" style={{marginTop:8}}>
+            <a className="btn-discogs" href={`https://www.discogs.com/release/${info.id}`} target="_blank" rel="noopener" style={{flex:'none',padding:'6px 14px'}}>
+              Visa på Discogs ↗
+            </a>
+          </div>
+        </div>
+      );
+    }
+
+    // ==================== Main App ====================
+    function App() {
+      const saved = loadSettings();
+      const prefs = loadPrefs();
+      const [token, setToken] = useState(saved.token || '');
+      const [username, setUsername] = useState(saved.username || '');
+      const [connected, setConnected] = useState(false);
+      const [collectionRaw, setCollectionRaw] = useState([]);
+      const [collectionIds, setCollectionIds] = useState(new Set());
+      const [collLoading, setCollLoading] = useState(false);
+      const [loadProg, setLoadProg] = useState('');
+      const [settingsOpen, setSettingsOpen] = useState(true);
+      const [folders, setFolders] = useState([]);
+      const [fields, setFields] = useState([]);
+      const [cacheInfo, setCacheInfo] = useState(null);
+
+      const [query, setQuery] = useState('');
+      const [searchType, setSearchType] = useState('catno');
+
+      const [filterFormat, setFilterFormat] = useState('');
+      const [filterSize, setFilterSize] = useState('');
+      const [filterYear, setFilterYear] = useState('');
+      const [filterCountry, setFilterCountry] = useState('');
+
+      // API results from Discogs search
+      const [apiResults, setApiResults] = useState([]);
+      // Local collection matches
+      const [localResults, setLocalResults] = useState([]);
+      const [searching, setSearching] = useState(false);
+      const [hasSearched, setHasSearched] = useState(false);
+      const [error, setError] = useState('');
+      const [pagination, setPagination] = useState(null);
+      const [page, setPage] = useState(1);
+      const [availableFilters, setAvailableFilters] = useState({ years: [], countries: [], formats: [] });
+
+      const [lastFolder, setLastFolder] = useState(prefs.lastFolder || '1');
+      const [lastMedia, setLastMedia] = useState(prefs.lastMedia || '');
+
+      // Auto-connect
+      useEffect(() => {
+        if (saved.token && saved.username && !connected && !collLoading) {
+          handleConnect(saved.token, saved.username);
+        }
+      }, []);
+
+      const handleConnect = async (t, u, forceRefresh) => {
+        const tk = t || token;
+        const un = u || username;
+        if (!tk || !un) return;
+        setCollLoading(true); setLoadProg('');
+        try {
+          let items;
+          const cached = !forceRefresh && loadCachedCollection(un);
+          if (cached && cached.items) {
+            items = cached.items;
+            setCacheInfo({ count: cached.count, ts: cached.ts });
+            setLoadProg(`${cached.count} (cachad)`);
+          } else {
+            setLoadProg('0/?');
+            items = await loadCollectionFromAPI(un, tk, (n, tot) => setLoadProg(`${n}/${tot}`));
+            saveCachedCollection(items, un);
+            setCacheInfo({ count: items.length, ts: Date.now() });
+          }
+          setCollectionRaw(items);
+          setCollectionIds(new Set(items.map(i => i.id)));
+          const [uf, ufi] = await Promise.all([loadFolders(un, tk), loadFields(un, tk)]);
+          setFolders(uf.length > 0 ? uf : [{ id: 1, name: 'Uncategorized', count: 0 }]);
+          setFields(ufi);
+          setConnected(true);
+          setSettingsOpen(false);
+          saveSettings(tk, un);
+        } catch (e) { alert('Kunde inte ansluta: ' + e.message); }
+        setCollLoading(false);
+      };
+
+      const handleRefresh = () => handleConnect(token, username, true);
+
+      const handleDisconnect = () => {
+        setConnected(false); setCollectionRaw([]); setCollectionIds(new Set());
+        setFolders([]); setFields([]); setToken(''); setUsername('');
+        setCacheInfo(null); clearAllData(); setSettingsOpen(true);
+      };
+
+      const handlePrefsUpdate = (p) => {
+        if (p.lastFolder) setLastFolder(p.lastFolder);
+        if (p.lastMedia) setLastMedia(p.lastMedia);
+        savePrefs({ ...loadPrefs(), ...p });
+      };
+
+      // ==================== Unified search ====================
+      const doSearch = async (p = 1, extraFilters = {}) => {
+        if (!query.trim() || !token) return;
+        setSearching(true); setError(''); setHasSearched(true);
+
+        // 1. Local search (instant)
+        const local = searchLocal(collectionRaw, query, searchType);
+        setLocalResults(local);
+
+        // 2. API search
+        try {
+          const params = { type: 'release', page: p, per_page: 20 };
+          if (searchType === 'catno') params.catno = query.trim();
+          else if (searchType === 'barcode') params.barcode = query.trim();
+          else params.q = query.trim();
+
+          const ff = extraFilters.format !== undefined ? extraFilters.format : filterFormat;
+          const fs = extraFilters.size !== undefined ? extraFilters.size : filterSize;
+          const fy = extraFilters.year !== undefined ? extraFilters.year : filterYear;
+          const fc = extraFilters.country !== undefined ? extraFilters.country : filterCountry;
+          if (ff) params.format = ff;
+          if (fy) params.year = fy;
+          if (fc) params.country = fc;
+
+          const d = await dGet('/database/search', token, params);
+          let res = d.results || [];
+
+          // Client-side size filter: keep matches + items without any size specified
+          if (fs) {
+            const sizes = ['12"', '7"', '10"'];
+            res = res.filter(r => {
+              const fmts = r.format || [];
+              const hasAnySize = fmts.some(f => sizes.some(s => f.includes(s)));
+              if (!hasAnySize) return true; // no size info → always show
+              return fmts.some(f => f.includes(fs)); // has size → must match
+            });
+          }
+
+          // Sort: owned first
+          const ownedIds = collectionIds;
+          res.sort((a, b) => {
+            const aOwned = ownedIds.has(a.id) ? 0 : 1;
+            const bOwned = ownedIds.has(b.id) ? 0 : 1;
+            return aOwned - bOwned;
+          });
+
+          setApiResults(res);
+          setPagination(d.pagination || null);
+          setPage(p);
+
+          if (p === 1 && !ff && !fs && !fy && !fc) {
+            setAvailableFilters(extractFilterOptions(d.results || []));
+          }
+        } catch (e) { setError(e.message); setApiResults([]); }
+        setSearching(false);
+      };
+
+      const handleSubmit = (e) => {
+        e.preventDefault();
+        setFilterFormat(''); setFilterSize(''); setFilterYear(''); setFilterCountry('');
+        setAvailableFilters({ years: [], countries: [], formats: [] });
+        doSearch(1, { format: '', size: '', year: '', country: '' });
+      };
+
+      const handleFilterChange = (setter, key) => (e) => {
+        const val = e.target.value;
+        setter(val);
+        const filters = { format: filterFormat, size: filterSize, year: filterYear, country: filterCountry };
+        filters[key] = val;
+        doSearch(1, filters);
+      };
+
+      const onAdded = (id) => setCollectionIds(prev => new Set([...prev, id]));
+
+      // Split: local matches shown on top, API results without owned duplicates below
+      const apiIds = new Set(apiResults.map(r => r.id));
+      const uniqueLocal = localResults.filter(item => !apiIds.has(item.basic_information.id));
+      const apiNotOwned = apiResults.filter(r => !collectionIds.has(r.id));
+      const apiOwned = apiResults.filter(r => collectionIds.has(r.id));
+      // Merge all owned: local + API-owned (deduplicated)
+      const allOwnedLocal = [...uniqueLocal];
+      // API-owned shown as collection cards too
+      const allOwnedApi = apiOwned;
+
+      const yearOptions = availableFilters.years;
+      const countryOptions = availableFilters.countries;
+      const formatOptions = availableFilters.formats.length > 0
+        ? availableFilters.formats.filter(f => !['12"','7"','10"','LP'].includes(f))
+        : ['Vinyl','CD','Cassette','DVD','Box Set'];
+
+      const totalOwned = uniqueLocal.length + apiOwned.length;
+      const totalResults = apiResults.length + uniqueLocal.length;
+
+      return (
+        <div>
+          <div className="header">
+            <div className="header-row">
+              <div>
+                <h1>Skivjansen</h1>
+                <p>Sök i Discogs — snabbt & enkelt</p>
+              </div>
+              {connected && <span className="header-badge">{collectionRaw.length} skivor</span>}
+            </div>
+          </div>
+          <div className="container">
+            {/* Settings */}
+            <div className="card" style={{marginBottom:14}}>
+              <button className="settings-toggle" onClick={() => setSettingsOpen(!settingsOpen)}>
+                <span>{connected ? `✓ Ansluten som ${username}` : 'Inställningar'}</span>
+                <span className={`arrow ${settingsOpen ? 'open' : ''}`}>▼</span>
+              </button>
+              {settingsOpen && (
+                <div className="settings-body">
+                  <div className="field">
+                    <label>Discogs API Token</label>
+                    <input type="password" value={token} onChange={e=>setToken(e.target.value)} placeholder="Din personliga access token" />
+                  </div>
+                  <div className="field">
+                    <label>Discogs användarnamn</label>
+                    <input type="text" value={username} onChange={e=>setUsername(e.target.value)} placeholder="Ditt användarnamn på Discogs" />
+                  </div>
+                  <button className="btn-primary" onClick={() => handleConnect()} disabled={!token||!username||collLoading}>
+                    {collLoading ? `Laddar collection... ${loadProg}` : connected ? `Ansluten (${collectionRaw.length} skivor)` : 'Anslut & ladda collection'}
+                  </button>
+                  {connected && cacheInfo && <div className="cache-msg">Cachad: {cacheInfo.count} skivor, uppdaterad {timeAgo(cacheInfo.ts)}</div>}
+                  {connected && <button className="btn-secondary" onClick={handleRefresh} disabled={collLoading}>Uppdatera collection från Discogs</button>}
+                  {connected && <button className="btn-danger" onClick={handleDisconnect}>Logga ut & rensa all data</button>}
+                </div>
+              )}
+            </div>
+
+            {connected && (
+              <>
+                {/* Search type tabs */}
+                <div className="search-tabs">
+                  {[['catno','Cat No'],['barcode','Streckkod'],['query','Fritext']].map(([k,l]) => (
+                    <button key={k} className={`search-tab ${searchType===k ? 'active' : ''}`}
+                      onClick={()=>setSearchType(k)}>{l}</button>
+                  ))}
+                </div>
+
+                {/* Search input */}
+                <form className="search-row" onSubmit={handleSubmit}>
+                  <input type="text" value={query} onChange={e=>setQuery(e.target.value)}
+                    placeholder={
+                      searchType==='catno' ? 'Katalognummer, t.ex. SBLP 001...'
+                      : searchType==='barcode' ? 'Streckkodsnummer...'
+                      : 'Artist, titel...'
+                    } />
+                  <button type="submit" disabled={!query.trim()||searching}>
+                    {searching ? <><span className="spinner"></span></> : 'Sök'}
+                  </button>
+                </form>
+
+                {/* Filters — shown after search has results */}
+                {hasSearched && apiResults.length > 0 && (
+                  <div className="filters">
+                    <select value={filterFormat} onChange={handleFilterChange(setFilterFormat, 'format')} className={filterFormat?'filter-active':''}>
+                      <option value="">Format...</option>
+                      {formatOptions.map(f => <option key={f} value={f}>{f}</option>)}
+                    </select>
+                    <select value={filterSize} onChange={handleFilterChange(setFilterSize, 'size')} className={filterSize?'filter-active':''}>
+                      <option value="">Storlek...</option>
+                      <option value='12"'>12"</option>
+                      <option value='7"'>7"</option>
+                      <option value='10"'>10"</option>
+                    </select>
+                    <select value={filterYear} onChange={handleFilterChange(setFilterYear, 'year')} className={filterYear?'filter-active':''}>
+                      <option value="">År...</option>
+                      {yearOptions.map(y => <option key={y} value={y}>{y}</option>)}
+                    </select>
+                    <select value={filterCountry} onChange={handleFilterChange(setFilterCountry, 'country')} className={filterCountry?'filter-active':''}>
+                      <option value="">Land...</option>
+                      {countryOptions.map(c => <option key={c} value={c}>{c}</option>)}
+                    </select>
+                  </div>
+                )}
+
+                {error && <div className="error-msg">{error}</div>}
+
+                {/* Results */}
+                {hasSearched && !searching && (
+                  <>
+                    {totalResults > 0 && (
+                      <div className="hit-count">
+                        {pagination?.items || totalResults} träffar
+                        {totalOwned > 0 && ` · ${totalOwned} ägda`}
+                        {pagination?.pages > 1 && ` · sida ${page}/${pagination.pages}`}
+                      </div>
+                    )}
+
+                    {/* Owned: local matches + API-owned, shown at top */}
+                    {totalOwned > 0 && (
+                      <>
+                        <div className="section-label owned">
+                          <span>I din collection ({totalOwned})</span>
+                          <span className="line"></span>
+                        </div>
+                        {uniqueLocal.map(item => <CollectionCard key={item.instance_id} item={item} />)}
+                        {allOwnedApi.map(r => (
+                          <ResultCard key={r.id} r={r} owned={true} token={token} username={username}
+                            folders={folders} fields={fields} defaultFolder={lastFolder} defaultMedia={lastMedia}
+                            onAdded={onAdded} onPrefsUpdate={handlePrefsUpdate} />
+                        ))}
+                      </>
+                    )}
+
+                    {/* Not owned: only non-owned API results */}
+                    {apiNotOwned.length > 0 && (
+                      <>
+                        {totalOwned > 0 && (
+                          <div className="section-label discogs">
+                            <span>Andra utgåvor ({apiNotOwned.length})</span>
+                            <span className="line"></span>
+                          </div>
+                        )}
+                        {apiNotOwned.map(r => (
+                          <ResultCard key={r.id} r={r} owned={false} token={token} username={username}
+                            folders={folders} fields={fields} defaultFolder={lastFolder} defaultMedia={lastMedia}
+                            onAdded={onAdded} onPrefsUpdate={handlePrefsUpdate} />
+                        ))}
+                      </>
+                    )}
+
+                    {totalResults === 0 && !error && <div className="empty-state"><p>Inga träffar</p></div>}
+
+                    {pagination?.pages > 1 && (
+                      <div className="pagination">
+                        <button onClick={()=>doSearch(page-1)} disabled={page<=1}>← Föregående</button>
+                        <button onClick={()=>doSearch(page+1)} disabled={page>=pagination.pages}>Nästa →</button>
+                      </div>
+                    )}
+                  </>
+                )}
+
+                {searching && <div className="empty-state"><div className="spinner" style={{width:24,height:24}}></div><p>Söker...</p></div>}
+
+                {!hasSearched && (
+                  <div className="empty-state">
+                    <div className="icon">🎵</div>
+                    <p>Sök på katalognummer, streckkod eller fritext</p>
+                  </div>
+                )}
+              </>
+            )}
+
+            {!connected && !collLoading && (
+              <div className="empty-state">
+                <div className="icon">🎵</div>
+                <p>Ange din Discogs API-token och användarnamn ovan för att börja</p>
+              </div>
+            )}
+          </div>
+        </div>
+      );
+    }
+
+    if ('serviceWorker' in navigator) {
+      navigator.serviceWorker.register('./sw.js').catch(() => {});
+    }
+
+    ReactDOM.createRoot(document.getElementById('root')).render(<App />);
+  </script>
+</body>
+</html>
