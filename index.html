@@ -369,7 +369,7 @@
     }
 
     // ==================== ResultCard ====================
-    function ResultCard({ r, owned, wanted, token, username, folders, fields, defaultFolder, defaultMedia, onAdded, onWanted, onUnwanted, onPrefsUpdate }) {
+    function ResultCard({ r, owned, wanted, hideOwned, token, username, folders, fields, defaultFolder, defaultMedia, onAdded, onWanted, onUnwanted, onPrefsUpdate }) {
       const [showForm, setShowForm] = useState(false);
       const [adding, setAdding] = useState(false);
       const [added, setAdded] = useState(false);
@@ -426,7 +426,7 @@
       };
 
       return (
-        <div className={`card result-card ${isOwned ? 'owned' : ''}`}>
+        <div className={`card result-card ${isOwned && !hideOwned ? 'owned' : ''}`}>
           <div className="result-top">
             {r.cover_image && <img src={r.cover_image} className="result-img" alt="" onError={e => e.target.style.display='none'} />}
             <div className="result-info">
@@ -438,7 +438,7 @@
                 </div>
                 <div style={{display:'flex',gap:4,flexShrink:0}}>
                   {isWanted && !isOwned && <span className="wanted-badge" style={{cursor:'pointer'}} onClick={handleRemoveWant} title="Klicka för att ta bort från wantlist">ÖNSKAD ✕</span>}
-                  {isOwned && <span className="owned-badge">ÄGD</span>}
+                  {isOwned && !hideOwned && <span className="owned-badge">ÄGD</span>}
                 </div>
               </div>
               <div className="format-badges">
@@ -530,8 +530,8 @@
     }
 
     // ==================== Wantlist item → ResultCard props ====================
-    function wantToResult(w) {
-      const info = w.basic_information;
+    function itemToResult(item) {
+      const info = item.basic_information;
       return {
         id: info.id,
         title: (info.artists || []).map(a => a.name).join(', ') + ' \u2014 ' + info.title,
@@ -545,7 +545,7 @@
       };
     }
 
-    const WANTLIST_PAGE_SIZE = 20;
+    const LIST_PAGE_SIZE = 20;
 
     // ==================== Main App ====================
     function App() {
@@ -792,6 +792,7 @@
                 {/* View navigation */}
                 <div className="view-nav">
                   <button className={activeView==='search' ? 'active' : ''} onClick={()=>{setActiveView('search');setPage(1);}}>Sök</button>
+                  <button className={activeView==='collection' ? 'active' : ''} onClick={()=>{setActiveView('collection');setPage(1);}}>Collection ({collectionRaw.length})</button>
                   <button className={activeView==='wantlist' ? 'active' : ''} onClick={()=>{setActiveView('wantlist');setPage(1);}}>Wantlist ({wantlistRaw.length})</button>
                 </div>
 
@@ -911,6 +912,46 @@
                   </>
                 )}
 
+                {/* ==================== Collection view ==================== */}
+                {activeView === 'collection' && (() => {
+                  const collSorted = [...collectionRaw].sort((a, b) => {
+                    const aInfo = a.basic_information, bInfo = b.basic_information;
+                    const aStr = ((aInfo.artists || []).map(x => x.name).join(', ') + ' ' + aInfo.title).toLowerCase();
+                    const bStr = ((bInfo.artists || []).map(x => x.name).join(', ') + ' ' + bInfo.title).toLowerCase();
+                    return aStr.localeCompare(bStr);
+                  });
+                  const collPages = Math.ceil(collSorted.length / LIST_PAGE_SIZE) || 1;
+                  const collPage = Math.min(page, collPages);
+                  const collSlice = collSorted.slice((collPage - 1) * LIST_PAGE_SIZE, collPage * LIST_PAGE_SIZE);
+                  return (
+                    <>
+                      {collectionRaw.length > 0 && (
+                        <div className="hit-count">{collectionRaw.length} utgåvor i din collection{collPages > 1 && ` · sida ${collPage}/${collPages}`}</div>
+                      )}
+                      {collSlice.map(item => {
+                        const r = itemToResult(item);
+                        return (
+                          <ResultCard key={item.instance_id} r={r} owned={true} hideOwned={true} wanted={wantlistIds.has(r.id)} token={token} username={username}
+                            folders={folders} fields={fields} defaultFolder={lastFolder} defaultMedia={lastMedia}
+                            onAdded={onAdded} onWanted={onWanted} onUnwanted={onUnwanted} onPrefsUpdate={handlePrefsUpdate} />
+                        );
+                      })}
+                      {collectionRaw.length === 0 && (
+                        <div className="empty-state">
+                          <div className="icon">📀</div>
+                          <p>Din collection är tom</p>
+                        </div>
+                      )}
+                      {collPages > 1 && (
+                        <div className="pagination">
+                          <button onClick={()=>setPage(Math.max(1, collPage-1))} disabled={collPage<=1}>← Föregående</button>
+                          <button onClick={()=>setPage(Math.min(collPages, collPage+1))} disabled={collPage>=collPages}>Nästa →</button>
+                        </div>
+                      )}
+                    </>
+                  );
+                })()}
+
                 {/* ==================== Wantlist view ==================== */}
                 {activeView === 'wantlist' && (() => {
                   const wantSorted = [...wantlistRaw].sort((a, b) => {
@@ -919,16 +960,16 @@
                     const bStr = ((bInfo.artists || []).map(x => x.name).join(', ') + ' ' + bInfo.title).toLowerCase();
                     return aStr.localeCompare(bStr);
                   });
-                  const wantPages = Math.ceil(wantSorted.length / WANTLIST_PAGE_SIZE) || 1;
+                  const wantPages = Math.ceil(wantSorted.length / LIST_PAGE_SIZE) || 1;
                   const wantPage = Math.min(page, wantPages);
-                  const wantSlice = wantSorted.slice((wantPage - 1) * WANTLIST_PAGE_SIZE, wantPage * WANTLIST_PAGE_SIZE);
+                  const wantSlice = wantSorted.slice((wantPage - 1) * LIST_PAGE_SIZE, wantPage * LIST_PAGE_SIZE);
                   return (
                     <>
                       {wantlistRaw.length > 0 && (
                         <div className="hit-count">{wantlistRaw.length} utgåvor i din wantlist{wantPages > 1 && ` · sida ${wantPage}/${wantPages}`}</div>
                       )}
                       {wantSlice.map(w => {
-                        const r = wantToResult(w);
+                        const r = itemToResult(w);
                         return (
                           <ResultCard key={r.id} r={r} owned={collectionIds.has(r.id)} wanted={true} token={token} username={username}
                             folders={folders} fields={fields} defaultFolder={lastFolder} defaultMedia={lastMedia}
