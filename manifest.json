@@ -1,7 +1,7 @@
 {
-  "name": "Skivjansen",
-  "short_name": "Skivjansen",
-  "description": "Sök i Discogs — snabbt & enkelt",
+  "name": "RunOut",
+  "short_name": "RunOut",
+  "description": "Search Discogs — fast & easy",
   "start_url": "./index.html",
   "display": "standalone",
   "background_color": "#f5f5f7",

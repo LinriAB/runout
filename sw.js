@@ -1,4 +1,4 @@
-const CACHE_NAME = 'skivjansen-v1';
+const CACHE_NAME = 'runout-v1';
 const STATIC_ASSETS = [
   './',
   './index.html',

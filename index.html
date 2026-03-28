@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<html lang="sv">
+<html lang="en">
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no" />
@@ -8,7 +8,7 @@
   <meta name="theme-color" content="#4f46e5" />
   <link rel="manifest" href="manifest.json" />
   <link rel="apple-touch-icon" href="icon-192.png" />
-  <title>Skivjansen</title>
+  <title>RunOut</title>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/react/18.2.0/umd/react.production.min.js"></script>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/react-dom/18.2.0/umd/react-dom.production.min.js"></script>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/babel-standalone/7.23.9/babel.min.js"></script>
@@ -192,12 +192,12 @@
     ];
 
     // ==================== Persistence ====================
-    const SETTINGS_KEY = "skivjansen_settings";
-    const PREFS_KEY = "skivjansen_prefs";
-    const COLLECTION_KEY = "skivjansen_collection";
-    const COLLECTION_META_KEY = "skivjansen_collection_meta";
-    const WANTLIST_KEY = "skivjansen_wantlist";
-    const WANTLIST_META_KEY = "skivjansen_wantlist_meta";
+    const SETTINGS_KEY = "runout_settings";
+    const PREFS_KEY = "runout_prefs";
+    const COLLECTION_KEY = "runout_collection";
+    const COLLECTION_META_KEY = "runout_collection_meta";
+    const WANTLIST_KEY = "runout_wantlist";
+    const WANTLIST_META_KEY = "runout_wantlist_meta";
 
     function saveSettings(token, username) {
       try { localStorage.setItem(SETTINGS_KEY, JSON.stringify({ token, username })); } catch(e) {}
@@ -348,11 +348,11 @@
 
     function timeAgo(ts) {
       const mins = Math.floor((Date.now() - ts) / 60000);
-      if (mins < 1) return 'just nu';
-      if (mins < 60) return `${mins} min sedan`;
+      if (mins < 1) return 'just now';
+      if (mins < 60) return `${mins}m ago`;
       const hrs = Math.floor(mins / 60);
-      if (hrs < 24) return `${hrs}h sedan`;
-      return `${Math.floor(hrs / 24)}d sedan`;
+      if (hrs < 24) return `${hrs}h ago`;
+      return `${Math.floor(hrs / 24)}d ago`;
     }
 
     // Search local collection — returns matching items
@@ -408,7 +408,7 @@
           setAdded(true);
           setShowForm(false);
           onAdded?.(r.id);
-        } catch (e) { alert("Kunde inte lägga till: " + e.message); }
+        } catch (e) { alert("Could not add: " + e.message); }
         setAdding(false);
       };
 
@@ -418,7 +418,7 @@
           await addToWantlist(username, token, r.id);
           setAddedWant(true);
           onWanted?.(r.id);
-        } catch (e) { alert("Kunde inte lägga till i wantlist: " + e.message); }
+        } catch (e) { alert("Could not add to wantlist: " + e.message); }
         setAddingWant(false);
       };
 
@@ -428,18 +428,18 @@
           await removeFromWantlist(username, token, r.id);
           setAddedWant(false);
           onUnwanted?.(r.id);
-        } catch (e) { alert("Kunde inte ta bort från wantlist: " + e.message); }
+        } catch (e) { alert("Could not remove from wantlist: " + e.message); }
         setAddingWant(false);
       };
 
       const handleRemoveFromCollection = async () => {
         if (!collectionInstance) return;
-        if (!confirm(`Ta bort "${r.title}" från din collection?`)) return;
+        if (!confirm(`Remove "${r.title}" from your collection?`)) return;
         try {
           await removeFromCollection(username, token, collectionInstance.folder_id, r.id, collectionInstance.instance_id);
           setRemoved(true);
           onRemoved?.(r.id, collectionInstance.instance_id);
-        } catch (e) { alert("Kunde inte ta bort: " + e.message); }
+        } catch (e) { alert("Could not remove:" + e.message); }
       };
 
       return (
@@ -454,9 +454,9 @@
                   {r.label?.length > 0 && <div className="result-label">{r.label.filter(l=>l!=='Not On Label').join(', ')}</div>}
                 </div>
                 <div style={{display:'flex',gap:4,flexShrink:0}}>
-                  {isWanted && !isOwned && <span className="wanted-badge" style={{cursor:'pointer'}} onClick={handleRemoveWant} title="Klicka för att ta bort från wantlist">ÖNSKAD ✕</span>}
-                  {isOwned && !hideOwned && collectionInstance && <span className="owned-badge" style={{cursor:'pointer'}} onClick={handleRemoveFromCollection} title="Klicka för att ta bort från collection">ÄGD ✕</span>}
-                  {isOwned && !hideOwned && !collectionInstance && <span className="owned-badge">ÄGD</span>}
+                  {isWanted && !isOwned && <span className="wanted-badge" style={{cursor:'pointer'}} onClick={handleRemoveWant} title="Click to remove from wantlist">WANTED ✕</span>}
+                  {isOwned && !hideOwned && collectionInstance && <span className="owned-badge" style={{cursor:'pointer'}} onClick={handleRemoveFromCollection} title="Click to remove from collection">OWNED ✕</span>}
+                  {isOwned && !hideOwned && !collectionInstance && <span className="owned-badge">OWNED</span>}
                 </div>
               </div>
               <div className="format-badges">
@@ -469,15 +469,15 @@
 
           <div className="result-actions">
             {!isOwned && token && username && !showForm && (
-              <button className="btn-add" onClick={() => setShowForm(true)}>+ Lägg till i collection</button>
+              <button className="btn-add" onClick={() => setShowForm(true)}>+ Add to collection</button>
             )}
             {isOwned && hideOwned && collectionInstance && (
-              <button className="btn-add" style={{flex:'none',background:'#dc2626'}} onClick={handleRemoveFromCollection}>Ta bort</button>
+              <button className="btn-add" style={{flex:'none',background:'#dc2626'}} onClick={handleRemoveFromCollection}>Remove</button>
             )}
             {!isOwned && !isWanted && token && username && (
-              <button className="btn-want" onClick={handleAddWant} disabled={addingWant}>{addingWant ? 'Lägger till...' : '♡ Want'}</button>
+              <button className="btn-want" onClick={handleAddWant} disabled={addingWant}>{addingWant ? 'Adding...' : '♡ Want'}</button>
             )}
-            <a className="btn-discogs" href={`https://www.discogs.com${r.uri || '/release/'+r.id}`} target="_blank" rel="noopener">Visa på Discogs ↗</a>
+            <a className="btn-discogs" href={`https://www.discogs.com${r.uri || '/release/'+r.id}`} target="_blank" rel="noopener">View on Discogs ↗</a>
           </div>
 
           {showForm && !isOwned && (
@@ -486,14 +486,14 @@
                 <div className="field">
                   <label>Media Condition</label>
                   <select value={mediaCond} onChange={e => setMediaCond(e.target.value)} style={{fontSize:13,padding:'8px 10px'}}>
-                    <option value="">— Välj —</option>
+                    <option value="">— Select —</option>
                     {CONDITIONS.map(c => <option key={c} value={c}>{c}</option>)}
                   </select>
                 </div>
                 <div className="field">
                   <label>Sleeve Condition</label>
                   <select value={sleeveCond} onChange={e => setSleeveCond(e.target.value)} style={{fontSize:13,padding:'8px 10px'}}>
-                    <option value="">— Välj —</option>
+                    <option value="">— Select —</option>
                     {CONDITIONS.map(c => <option key={c} value={c}>{c}</option>)}
                   </select>
                 </div>
@@ -506,11 +506,11 @@
               </div>
               <div className="add-form-full">
                 <label>Notes</label>
-                <textarea value={notes} onChange={e => setNotes(e.target.value)} placeholder="Valfria anteckningar..." rows="2" style={{fontSize:13}} />
+                <textarea value={notes} onChange={e => setNotes(e.target.value)} placeholder="Optional notes..." rows="2" style={{fontSize:13}} />
               </div>
               <div className="add-form-actions">
-                <button className="btn-confirm" onClick={handleAdd} disabled={adding}>{adding ? 'Lägger till...' : 'Lägg till'}</button>
-                <button className="btn-cancel" onClick={() => setShowForm(false)}>Avbryt</button>
+                <button className="btn-confirm" onClick={handleAdd} disabled={adding}>{adding ? 'Adding...' : 'Add'}</button>
+                <button className="btn-cancel" onClick={() => setShowForm(false)}>Cancel</button>
               </div>
             </div>
           )}
@@ -533,7 +533,7 @@
                   <div className="result-title result-title-wrap">{(info.artists || []).map(a => a.name).join(', ')} — {info.title}</div>
                   {labels.length > 0 && <div className="result-catno">{labels.join(' · ')}</div>}
                 </div>
-                <span className="owned-badge">ÄGD</span>
+                <span className="owned-badge">OWNED</span>
               </div>
               <div className="format-badges" style={{marginTop:6}}>
                 {formats.map(f => <span key={f} className={`format-badge ${fmtClass(f)}`}>{f}</span>)}
@@ -543,7 +543,7 @@
           </div>
           <div className="result-actions" style={{marginTop:8}}>
             <a className="btn-discogs" href={`https://www.discogs.com/release/${info.id}`} target="_blank" rel="noopener" style={{flex:'none',padding:'6px 14px'}}>
-              Visa på Discogs ↗
+              View on Discogs ↗
             </a>
           </div>
         </div>
@@ -627,7 +627,7 @@
           if (cached && cached.items) {
             items = cached.items;
             setCacheInfo({ count: cached.count, ts: cached.ts });
-            setLoadProg(`${cached.count} (cachad)`);
+            setLoadProg(`${cached.count} (cached)`);
           } else {
             setLoadProg('0/?');
             items = await loadCollectionFromAPI(un, tk, (n, tot) => setLoadProg(`${n}/${tot}`));
@@ -653,7 +653,7 @@
           setConnected(true);
           setSettingsOpen(false);
           saveSettings(tk, un);
-        } catch (e) { alert('Kunde inte ansluta: ' + e.message); }
+        } catch (e) { alert('Could not connect:' + e.message); }
         setCollLoading(false);
       };
 
@@ -783,35 +783,35 @@
           <div className="header">
             <div className="header-row">
               <div>
-                <h1>Skivjansen</h1>
-                <p>Sök i Discogs — snabbt & enkelt</p>
+                <h1>RunOut</h1>
+                <p>Search Discogs — fast & easy</p>
               </div>
-              {connected && <span className="header-badge">{collectionRaw.length} skivor</span>}
+              {connected && <span className="header-badge">{collectionRaw.length} records</span>}
             </div>
           </div>
           <div className="container">
             {/* Settings */}
             <div className="card" style={{marginBottom:14}}>
               <button className="settings-toggle" onClick={() => setSettingsOpen(!settingsOpen)}>
-                <span>{connected ? `✓ Ansluten som ${username}` : 'Inställningar'}</span>
+                <span>{connected ? `✓ Connected as ${username}` : 'Settings'}</span>
                 <span className={`arrow ${settingsOpen ? 'open' : ''}`}>▼</span>
               </button>
               {settingsOpen && (
                 <div className="settings-body">
                   <div className="field">
                     <label>Discogs API Token</label>
-                    <input type="password" value={token} onChange={e=>setToken(e.target.value)} placeholder="Din personliga access token" />
+                    <input type="password" value={token} onChange={e=>setToken(e.target.value)} placeholder="Your personal access token" />
                   </div>
                   <div className="field">
-                    <label>Discogs användarnamn</label>
-                    <input type="text" value={username} onChange={e=>setUsername(e.target.value)} placeholder="Ditt användarnamn på Discogs" />
+                    <label>Discogs Username</label>
+                    <input type="text" value={username} onChange={e=>setUsername(e.target.value)} placeholder="Your Discogs username" />
                   </div>
                   <button className="btn-primary" onClick={() => handleConnect()} disabled={!token||!username||collLoading}>
-                    {collLoading ? `Laddar collection... ${loadProg}` : connected ? `Ansluten (${collectionRaw.length} skivor)` : 'Anslut & ladda collection'}
+                    {collLoading ? `Loading collection... ${loadProg}` : connected ? `Connected (${collectionRaw.length} records)` : 'Connect & load collection'}
                   </button>
-                  {connected && cacheInfo && <div className="cache-msg">Cachad: {cacheInfo.count} skivor, uppdaterad {timeAgo(cacheInfo.ts)}</div>}
-                  {connected && <button className="btn-secondary" onClick={handleRefresh} disabled={collLoading}>Uppdatera collection från Discogs</button>}
-                  {connected && <button className="btn-danger" onClick={handleDisconnect}>Logga ut & rensa all data</button>}
+                  {connected && cacheInfo && <div className="cache-msg">Cached: {cacheInfo.count} records, updated {timeAgo(cacheInfo.ts)}</div>}
+                  {connected && <button className="btn-secondary" onClick={handleRefresh} disabled={collLoading}>Refresh collection from Discogs</button>}
+                  {connected && <button className="btn-danger" onClick={handleDisconnect}>Log out & clear all data</button>}
                 </div>
               )}
             </div>
@@ -820,7 +820,7 @@
               <>
                 {/* View navigation */}
                 <div className="view-nav">
-                  <button className={activeView==='search' ? 'active' : ''} onClick={()=>{setActiveView('search');setPage(1);}}>Sök</button>
+                  <button className={activeView==='search' ? 'active' : ''} onClick={()=>{setActiveView('search');setPage(1);}}>Search</button>
                   <button className={activeView==='collection' ? 'active' : ''} onClick={()=>{setActiveView('collection');setPage(1);}}>Collection ({collectionRaw.length})</button>
                   <button className={activeView==='wantlist' ? 'active' : ''} onClick={()=>{setActiveView('wantlist');setPage(1);}}>Wantlist ({wantlistRaw.length})</button>
                 </div>
@@ -830,7 +830,7 @@
                   <>
                     {/* Search type tabs */}
                     <div className="search-tabs">
-                      {[['catno','Cat No'],['barcode','Streckkod'],['query','Fritext']].map(([k,l]) => (
+                      {[['catno','Cat No'],['barcode','Barcode'],['query','Search']].map(([k,l]) => (
                         <button key={k} className={`search-tab ${searchType===k ? 'active' : ''}`}
                           onClick={()=>setSearchType(k)}>{l}</button>
                       ))}
@@ -840,12 +840,12 @@
                     <form className="search-row" onSubmit={handleSubmit}>
                       <input type="text" value={query} onChange={e=>setQuery(e.target.value)}
                         placeholder={
-                          searchType==='catno' ? 'Katalognummer, t.ex. SBLP 001...'
-                          : searchType==='barcode' ? 'Streckkodsnummer...'
+                          searchType==='catno' ? 'Catalog number, e.g. SBLP 001...'
+                          : searchType==='barcode' ? 'Barcode number...'
                           : 'Artist, titel...'
                         } />
                       <button type="submit" disabled={!query.trim()||searching}>
-                        {searching ? <><span className="spinner"></span></> : 'Sök'}
+                        {searching ? <><span className="spinner"></span></> : 'Search'}
                       </button>
                     </form>
 
@@ -857,17 +857,17 @@
                           {formatOptions.map(f => <option key={f} value={f}>{f}</option>)}
                         </select>
                         <select value={filterSize} onChange={handleFilterChange(setFilterSize, 'size')} className={filterSize?'filter-active':''}>
-                          <option value="">Storlek...</option>
+                          <option value="">Size...</option>
                           <option value='12"'>12"</option>
                           <option value='7"'>7"</option>
                           <option value='10"'>10"</option>
                         </select>
                         <select value={filterYear} onChange={handleFilterChange(setFilterYear, 'year')} className={filterYear?'filter-active':''}>
-                          <option value="">År...</option>
+                          <option value="">Year...</option>
                           {yearOptions.map(y => <option key={y} value={y}>{y}</option>)}
                         </select>
                         <select value={filterCountry} onChange={handleFilterChange(setFilterCountry, 'country')} className={filterCountry?'filter-active':''}>
-                          <option value="">Land...</option>
+                          <option value="">Country...</option>
                           {countryOptions.map(c => <option key={c} value={c}>{c}</option>)}
                         </select>
                       </div>
@@ -880,9 +880,9 @@
                       <>
                         {totalResults > 0 && (
                           <div className="hit-count">
-                            {pagination?.items || totalResults} träffar
-                            {totalOwned > 0 && ` · ${totalOwned} ägda`}
-                            {pagination?.pages > 1 && ` · sida ${page}/${pagination.pages}`}
+                            {pagination?.items || totalResults} results
+                            {totalOwned > 0 && ` · ${totalOwned} owned`}
+                            {pagination?.pages > 1 && ` · page ${page}/${pagination.pages}`}
                           </div>
                         )}
 
@@ -890,7 +890,7 @@
                         {totalOwned > 0 && (
                           <>
                             <div className="section-label owned">
-                              <span>I din collection ({totalOwned})</span>
+                              <span>In your collection ({totalOwned})</span>
                               <span className="line"></span>
                             </div>
                             {uniqueLocal.map(item => <CollectionCard key={item.instance_id} item={item} />)}
@@ -907,7 +907,7 @@
                           <>
                             {totalOwned > 0 && (
                               <div className="section-label discogs">
-                                <span>Andra utgåvor ({apiNotOwned.length})</span>
+                                <span>Other releases ({apiNotOwned.length})</span>
                                 <span className="line"></span>
                               </div>
                             )}
@@ -919,23 +919,23 @@
                           </>
                         )}
 
-                        {totalResults === 0 && !error && <div className="empty-state"><p>Inga träffar</p></div>}
+                        {totalResults === 0 && !error && <div className="empty-state"><p>No results</p></div>}
 
                         {pagination?.pages > 1 && (
                           <div className="pagination">
-                            <button onClick={()=>doSearch(page-1)} disabled={page<=1}>← Föregående</button>
-                            <button onClick={()=>doSearch(page+1)} disabled={page>=pagination.pages}>Nästa →</button>
+                            <button onClick={()=>doSearch(page-1)} disabled={page<=1}>← Previous</button>
+                            <button onClick={()=>doSearch(page+1)} disabled={page>=pagination.pages}>Next →</button>
                           </div>
                         )}
                       </>
                     )}
 
-                    {searching && <div className="empty-state"><div className="spinner" style={{width:24,height:24}}></div><p>Söker...</p></div>}
+                    {searching && <div className="empty-state"><div className="spinner" style={{width:24,height:24}}></div><p>Searching...</p></div>}
 
                     {!hasSearched && (
                       <div className="empty-state">
                         <div className="icon">🎵</div>
-                        <p>Sök på katalognummer, streckkod eller fritext</p>
+                        <p>Search by catalog number, barcode or keywords</p>
                       </div>
                     )}
                   </>
@@ -955,7 +955,7 @@
                   return (
                     <>
                       {collectionRaw.length > 0 && (
-                        <div className="hit-count">{collectionRaw.length} utgåvor i din collection{collPages > 1 && ` · sida ${collPage}/${collPages}`}</div>
+                        <div className="hit-count">{collectionRaw.length} releases in your collection{collPages > 1 && ` · page ${collPage}/${collPages}`}</div>
                       )}
                       {collSlice.map(item => {
                         const r = itemToResult(item);
@@ -968,13 +968,13 @@
                       {collectionRaw.length === 0 && (
                         <div className="empty-state">
                           <div className="icon">📀</div>
-                          <p>Din collection är tom</p>
+                          <p>Your collection is empty</p>
                         </div>
                       )}
                       {collPages > 1 && (
                         <div className="pagination">
-                          <button onClick={()=>setPage(Math.max(1, collPage-1))} disabled={collPage<=1}>← Föregående</button>
-                          <button onClick={()=>setPage(Math.min(collPages, collPage+1))} disabled={collPage>=collPages}>Nästa →</button>
+                          <button onClick={()=>setPage(Math.max(1, collPage-1))} disabled={collPage<=1}>← Previous</button>
+                          <button onClick={()=>setPage(Math.min(collPages, collPage+1))} disabled={collPage>=collPages}>Next →</button>
                         </div>
                       )}
                     </>
@@ -995,7 +995,7 @@
                   return (
                     <>
                       {wantlistRaw.length > 0 && (
-                        <div className="hit-count">{wantlistRaw.length} utgåvor i din wantlist{wantPages > 1 && ` · sida ${wantPage}/${wantPages}`}</div>
+                        <div className="hit-count">{wantlistRaw.length} releases in your wantlist{wantPages > 1 && ` · page ${wantPage}/${wantPages}`}</div>
                       )}
                       {wantSlice.map(w => {
                         const r = itemToResult(w);
@@ -1008,13 +1008,13 @@
                       {wantlistRaw.length === 0 && (
                         <div className="empty-state">
                           <div className="icon">♡</div>
-                          <p>Din wantlist är tom</p>
+                          <p>Your wantlist is empty</p>
                         </div>
                       )}
                       {wantPages > 1 && (
                         <div className="pagination">
-                          <button onClick={()=>setPage(Math.max(1, wantPage-1))} disabled={wantPage<=1}>← Föregående</button>
-                          <button onClick={()=>setPage(Math.min(wantPages, wantPage+1))} disabled={wantPage>=wantPages}>Nästa →</button>
+                          <button onClick={()=>setPage(Math.max(1, wantPage-1))} disabled={wantPage<=1}>← Previous</button>
+                          <button onClick={()=>setPage(Math.min(wantPages, wantPage+1))} disabled={wantPage>=wantPages}>Next →</button>
                         </div>
                       )}
                     </>
@@ -1026,7 +1026,7 @@
             {!connected && !collLoading && (
               <div className="empty-state">
                 <div className="icon">🎵</div>
-                <p>Ange din Discogs API-token och användarnamn ovan för att börja</p>
+                <p>Enter your Discogs API token and username above to get started</p>
               </div>
             )}
           </div>
