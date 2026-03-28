@@ -293,6 +293,12 @@
       if (!r.ok) throw new Error(`${r.status} ${r.statusText}`);
       return r.json();
     }
+    async function removeFromWantlist(user, token, releaseId) {
+      const url = new URL(API + `/users/${user}/wants/${releaseId}`);
+      url.searchParams.set("token", token);
+      const r = await fetch(url, { method: "DELETE" });
+      if (!r.ok && r.status !== 204) throw new Error(`${r.status} ${r.statusText}`);
+    }
 
     async function loadFolders(user, token) {
       const d = await dGet(`/users/${user}/collection/folders`, token);
@@ -355,7 +361,7 @@
     }
 
     // ==================== ResultCard ====================
-    function ResultCard({ r, owned, wanted, token, username, folders, fields, defaultFolder, defaultMedia, onAdded, onWanted, onPrefsUpdate }) {
+    function ResultCard({ r, owned, wanted, token, username, folders, fields, defaultFolder, defaultMedia, onAdded, onWanted, onUnwanted, onPrefsUpdate }) {
       const [showForm, setShowForm] = useState(false);
       const [adding, setAdding] = useState(false);
       const [added, setAdded] = useState(false);
@@ -401,6 +407,16 @@
         setAddingWant(false);
       };
 
+      const handleRemoveWant = async () => {
+        setAddingWant(true);
+        try {
+          await removeFromWantlist(username, token, r.id);
+          setAddedWant(false);
+          onUnwanted?.(r.id);
+        } catch (e) { alert("Kunde inte ta bort från wantlist: " + e.message); }
+        setAddingWant(false);
+      };
+
       return (
         <div className={`card result-card ${isOwned ? 'owned' : ''}`}>
           <div className="result-top">
@@ -413,7 +429,7 @@
                   {r.label?.length > 0 && <div className="result-label">{r.label.filter(l=>l!=='Not On Label').join(', ')}</div>}
                 </div>
                 <div style={{display:'flex',gap:4,flexShrink:0}}>
-                  {isWanted && !isOwned && <span className="wanted-badge">ÖNSKAD</span>}
+                  {isWanted && !isOwned && <span className="wanted-badge" style={{cursor:'pointer'}} onClick={handleRemoveWant} title="Klicka för att ta bort från wantlist">ÖNSKAD ✕</span>}
                   {isOwned && <span className="owned-badge">ÄGD</span>}
                 </div>
               </div>
@@ -679,6 +695,7 @@
 
       const onAdded = (id) => setCollectionIds(prev => new Set([...prev, id]));
       const onWanted = (id) => setWantlistIds(prev => new Set([...prev, id]));
+      const onUnwanted = (id) => setWantlistIds(prev => { const s = new Set(prev); s.delete(id); return s; });
 
       // Split: local matches shown on top, API results without owned duplicates below
       const apiIds = new Set(apiResults.map(r => r.id));
@@ -808,7 +825,7 @@
                         {allOwnedApi.map(r => (
                           <ResultCard key={r.id} r={r} owned={true} wanted={wantlistIds.has(r.id)} token={token} username={username}
                             folders={folders} fields={fields} defaultFolder={lastFolder} defaultMedia={lastMedia}
-                            onAdded={onAdded} onWanted={onWanted} onPrefsUpdate={handlePrefsUpdate} />
+                            onAdded={onAdded} onWanted={onWanted} onUnwanted={onUnwanted} onPrefsUpdate={handlePrefsUpdate} />
                         ))}
                       </>
                     )}
@@ -825,7 +842,7 @@
                         {apiNotOwned.map(r => (
                           <ResultCard key={r.id} r={r} owned={false} wanted={wantlistIds.has(r.id)} token={token} username={username}
                             folders={folders} fields={fields} defaultFolder={lastFolder} defaultMedia={lastMedia}
-                            onAdded={onAdded} onWanted={onWanted} onPrefsUpdate={handlePrefsUpdate} />
+                            onAdded={onAdded} onWanted={onWanted} onUnwanted={onUnwanted} onPrefsUpdate={handlePrefsUpdate} />
                         ))}
                       </>
                     )}
