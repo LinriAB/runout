@@ -439,12 +439,6 @@
             <div className="add-form">
               <div className="add-form-grid">
                 <div className="field">
-                  <label>Folder</label>
-                  <select value={folderId} onChange={e => setFolderId(e.target.value)} style={{fontSize:13,padding:'8px 10px'}}>
-                    {folders.map(f => <option key={f.id} value={f.id}>{f.name} ({f.count})</option>)}
-                  </select>
-                </div>
-                <div className="field">
                   <label>Media Condition</label>
                   <select value={mediaCond} onChange={e => setMediaCond(e.target.value)} style={{fontSize:13,padding:'8px 10px'}}>
                     <option value="">— Välj —</option>
@@ -456,6 +450,12 @@
                   <select value={sleeveCond} onChange={e => setSleeveCond(e.target.value)} style={{fontSize:13,padding:'8px 10px'}}>
                     <option value="">— Välj —</option>
                     {CONDITIONS.map(c => <option key={c} value={c}>{c}</option>)}
+                  </select>
+                </div>
+                <div className="field">
+                  <label>Folder</label>
+                  <select value={folderId} onChange={e => setFolderId(e.target.value)} style={{fontSize:13,padding:'8px 10px'}}>
+                    {folders.map(f => <option key={f.id} value={f.id}>{f.name} ({f.count})</option>)}
                   </select>
                 </div>
               </div>
