@@ -169,6 +169,14 @@
     }
     .btn-want:disabled { opacity: 0.5; cursor: not-allowed; }
 
+    .view-nav { display: flex; gap: 0; margin-bottom: 14px; border-radius: 10px; overflow: hidden; border: 1.5px solid #e5e5ea; }
+    .view-nav button {
+      flex: 1; padding: 9px; border: none; font-size: 13px; font-weight: 600;
+      cursor: pointer; transition: all 0.2s; background: white; color: #666;
+    }
+    .view-nav button.active { background: #4f46e5; color: white; }
+    .view-nav button:not(:last-child) { border-right: 1.5px solid #e5e5ea; }
+
     .coll-meta { font-size: 11px; color: #aaa; margin-top: 4px; }
   </style>
 </head>
@@ -521,6 +529,24 @@
       );
     }
 
+    // ==================== Wantlist item → ResultCard props ====================
+    function wantToResult(w) {
+      const info = w.basic_information;
+      return {
+        id: info.id,
+        title: (info.artists || []).map(a => a.name).join(', ') + ' \u2014 ' + info.title,
+        cover_image: info.cover_image,
+        catno: (info.labels || []).map(l => l.catno).filter(c => c && c !== 'none')[0] || '',
+        label: (info.labels || []).map(l => l.name),
+        format: (info.formats || []).flatMap(f => [f.name, ...(f.descriptions || [])]).filter(Boolean),
+        year: info.year > 0 ? String(info.year) : '',
+        country: '',
+        uri: '/release/' + info.id,
+      };
+    }
+
+    const WANTLIST_PAGE_SIZE = 20;
+
     // ==================== Main App ====================
     function App() {
       const saved = loadSettings();
@@ -537,6 +563,8 @@
       const [fields, setFields] = useState([]);
       const [cacheInfo, setCacheInfo] = useState(null);
       const [wantlistIds, setWantlistIds] = useState(new Set());
+      const [wantlistRaw, setWantlistRaw] = useState([]);
+      const [activeView, setActiveView] = useState('search');
 
       const [query, setQuery] = useState('');
       const [searchType, setSearchType] = useState('catno');
@@ -592,13 +620,15 @@
           setFields(ufi);
           // Load wantlist
           const cachedWants = !forceRefresh && loadCachedWantlist(un);
+          let wantItems;
           if (cachedWants && cachedWants.items) {
-            setWantlistIds(new Set(cachedWants.items.map(w => w.id)));
+            wantItems = cachedWants.items;
           } else {
-            const wants = await loadWantlistFromAPI(un, tk);
-            setWantlistIds(new Set(wants.map(w => w.id)));
-            saveCachedWantlist(wants, un);
+            wantItems = await loadWantlistFromAPI(un, tk);
+            saveCachedWantlist(wantItems, un);
           }
+          setWantlistRaw(wantItems);
+          setWantlistIds(new Set(wantItems.map(w => w.id)));
           setConnected(true);
           setSettingsOpen(false);
           saveSettings(tk, un);
@@ -610,7 +640,7 @@
 
       const handleDisconnect = () => {
         setConnected(false); setCollectionRaw([]); setCollectionIds(new Set());
-        setWantlistIds(new Set());
+        setWantlistIds(new Set()); setWantlistRaw([]);
         setFolders([]); setFields([]); setToken(''); setUsername('');
         setCacheInfo(null); clearAllData(); setSettingsOpen(true);
       };
@@ -695,7 +725,10 @@
 
       const onAdded = (id) => setCollectionIds(prev => new Set([...prev, id]));
       const onWanted = (id) => setWantlistIds(prev => new Set([...prev, id]));
-      const onUnwanted = (id) => setWantlistIds(prev => { const s = new Set(prev); s.delete(id); return s; });
+      const onUnwanted = (id) => {
+        setWantlistIds(prev => { const s = new Set(prev); s.delete(id); return s; });
+        setWantlistRaw(prev => prev.filter(w => w.id !== id));
+      };
 
       // Split: local matches shown on top, API results without owned duplicates below
       const apiIds = new Set(apiResults.map(r => r.id));
@@ -756,116 +789,161 @@
 
             {connected && (
               <>
-                {/* Search type tabs */}
-                <div className="search-tabs">
-                  {[['catno','Cat No'],['barcode','Streckkod'],['query','Fritext']].map(([k,l]) => (
-                    <button key={k} className={`search-tab ${searchType===k ? 'active' : ''}`}
-                      onClick={()=>setSearchType(k)}>{l}</button>
-                  ))}
+                {/* View navigation */}
+                <div className="view-nav">
+                  <button className={activeView==='search' ? 'active' : ''} onClick={()=>{setActiveView('search');setPage(1);}}>Sök</button>
+                  <button className={activeView==='wantlist' ? 'active' : ''} onClick={()=>{setActiveView('wantlist');setPage(1);}}>Wantlist ({wantlistRaw.length})</button>
                 </div>
 
-                {/* Search input */}
-                <form className="search-row" onSubmit={handleSubmit}>
-                  <input type="text" value={query} onChange={e=>setQuery(e.target.value)}
-                    placeholder={
-                      searchType==='catno' ? 'Katalognummer, t.ex. SBLP 001...'
-                      : searchType==='barcode' ? 'Streckkodsnummer...'
-                      : 'Artist, titel...'
-                    } />
-                  <button type="submit" disabled={!query.trim()||searching}>
-                    {searching ? <><span className="spinner"></span></> : 'Sök'}
-                  </button>
-                </form>
-
-                {/* Filters — shown after search has results */}
-                {hasSearched && apiResults.length > 0 && (
-                  <div className="filters">
-                    <select value={filterFormat} onChange={handleFilterChange(setFilterFormat, 'format')} className={filterFormat?'filter-active':''}>
-                      <option value="">Format...</option>
-                      {formatOptions.map(f => <option key={f} value={f}>{f}</option>)}
-                    </select>
-                    <select value={filterSize} onChange={handleFilterChange(setFilterSize, 'size')} className={filterSize?'filter-active':''}>
-                      <option value="">Storlek...</option>
-                      <option value='12"'>12"</option>
-                      <option value='7"'>7"</option>
-                      <option value='10"'>10"</option>
-                    </select>
-                    <select value={filterYear} onChange={handleFilterChange(setFilterYear, 'year')} className={filterYear?'filter-active':''}>
-                      <option value="">År...</option>
-                      {yearOptions.map(y => <option key={y} value={y}>{y}</option>)}
-                    </select>
-                    <select value={filterCountry} onChange={handleFilterChange(setFilterCountry, 'country')} className={filterCountry?'filter-active':''}>
-                      <option value="">Land...</option>
-                      {countryOptions.map(c => <option key={c} value={c}>{c}</option>)}
-                    </select>
-                  </div>
-                )}
-
-                {error && <div className="error-msg">{error}</div>}
-
-                {/* Results */}
-                {hasSearched && !searching && (
+                {/* ==================== Search view ==================== */}
+                {activeView === 'search' && (
                   <>
-                    {totalResults > 0 && (
-                      <div className="hit-count">
-                        {pagination?.items || totalResults} träffar
-                        {totalOwned > 0 && ` · ${totalOwned} ägda`}
-                        {pagination?.pages > 1 && ` · sida ${page}/${pagination.pages}`}
+                    {/* Search type tabs */}
+                    <div className="search-tabs">
+                      {[['catno','Cat No'],['barcode','Streckkod'],['query','Fritext']].map(([k,l]) => (
+                        <button key={k} className={`search-tab ${searchType===k ? 'active' : ''}`}
+                          onClick={()=>setSearchType(k)}>{l}</button>
+                      ))}
+                    </div>
+
+                    {/* Search input */}
+                    <form className="search-row" onSubmit={handleSubmit}>
+                      <input type="text" value={query} onChange={e=>setQuery(e.target.value)}
+                        placeholder={
+                          searchType==='catno' ? 'Katalognummer, t.ex. SBLP 001...'
+                          : searchType==='barcode' ? 'Streckkodsnummer...'
+                          : 'Artist, titel...'
+                        } />
+                      <button type="submit" disabled={!query.trim()||searching}>
+                        {searching ? <><span className="spinner"></span></> : 'Sök'}
+                      </button>
+                    </form>
+
+                    {/* Filters — shown after search has results */}
+                    {hasSearched && apiResults.length > 0 && (
+                      <div className="filters">
+                        <select value={filterFormat} onChange={handleFilterChange(setFilterFormat, 'format')} className={filterFormat?'filter-active':''}>
+                          <option value="">Format...</option>
+                          {formatOptions.map(f => <option key={f} value={f}>{f}</option>)}
+                        </select>
+                        <select value={filterSize} onChange={handleFilterChange(setFilterSize, 'size')} className={filterSize?'filter-active':''}>
+                          <option value="">Storlek...</option>
+                          <option value='12"'>12"</option>
+                          <option value='7"'>7"</option>
+                          <option value='10"'>10"</option>
+                        </select>
+                        <select value={filterYear} onChange={handleFilterChange(setFilterYear, 'year')} className={filterYear?'filter-active':''}>
+                          <option value="">År...</option>
+                          {yearOptions.map(y => <option key={y} value={y}>{y}</option>)}
+                        </select>
+                        <select value={filterCountry} onChange={handleFilterChange(setFilterCountry, 'country')} className={filterCountry?'filter-active':''}>
+                          <option value="">Land...</option>
+                          {countryOptions.map(c => <option key={c} value={c}>{c}</option>)}
+                        </select>
                       </div>
                     )}
 
-                    {/* Owned: local matches + API-owned, shown at top */}
-                    {totalOwned > 0 && (
-                      <>
-                        <div className="section-label owned">
-                          <span>I din collection ({totalOwned})</span>
-                          <span className="line"></span>
-                        </div>
-                        {uniqueLocal.map(item => <CollectionCard key={item.instance_id} item={item} />)}
-                        {allOwnedApi.map(r => (
-                          <ResultCard key={r.id} r={r} owned={true} wanted={wantlistIds.has(r.id)} token={token} username={username}
-                            folders={folders} fields={fields} defaultFolder={lastFolder} defaultMedia={lastMedia}
-                            onAdded={onAdded} onWanted={onWanted} onUnwanted={onUnwanted} onPrefsUpdate={handlePrefsUpdate} />
-                        ))}
-                      </>
-                    )}
+                    {error && <div className="error-msg">{error}</div>}
 
-                    {/* Not owned: only non-owned API results */}
-                    {apiNotOwned.length > 0 && (
+                    {/* Results */}
+                    {hasSearched && !searching && (
                       <>
-                        {totalOwned > 0 && (
-                          <div className="section-label discogs">
-                            <span>Andra utgåvor ({apiNotOwned.length})</span>
-                            <span className="line"></span>
+                        {totalResults > 0 && (
+                          <div className="hit-count">
+                            {pagination?.items || totalResults} träffar
+                            {totalOwned > 0 && ` · ${totalOwned} ägda`}
+                            {pagination?.pages > 1 && ` · sida ${page}/${pagination.pages}`}
                           </div>
                         )}
-                        {apiNotOwned.map(r => (
-                          <ResultCard key={r.id} r={r} owned={false} wanted={wantlistIds.has(r.id)} token={token} username={username}
-                            folders={folders} fields={fields} defaultFolder={lastFolder} defaultMedia={lastMedia}
-                            onAdded={onAdded} onWanted={onWanted} onUnwanted={onUnwanted} onPrefsUpdate={handlePrefsUpdate} />
-                        ))}
+
+                        {/* Owned: local matches + API-owned, shown at top */}
+                        {totalOwned > 0 && (
+                          <>
+                            <div className="section-label owned">
+                              <span>I din collection ({totalOwned})</span>
+                              <span className="line"></span>
+                            </div>
+                            {uniqueLocal.map(item => <CollectionCard key={item.instance_id} item={item} />)}
+                            {allOwnedApi.map(r => (
+                              <ResultCard key={r.id} r={r} owned={true} wanted={wantlistIds.has(r.id)} token={token} username={username}
+                                folders={folders} fields={fields} defaultFolder={lastFolder} defaultMedia={lastMedia}
+                                onAdded={onAdded} onWanted={onWanted} onUnwanted={onUnwanted} onPrefsUpdate={handlePrefsUpdate} />
+                            ))}
+                          </>
+                        )}
+
+                        {/* Not owned: only non-owned API results */}
+                        {apiNotOwned.length > 0 && (
+                          <>
+                            {totalOwned > 0 && (
+                              <div className="section-label discogs">
+                                <span>Andra utgåvor ({apiNotOwned.length})</span>
+                                <span className="line"></span>
+                              </div>
+                            )}
+                            {apiNotOwned.map(r => (
+                              <ResultCard key={r.id} r={r} owned={false} wanted={wantlistIds.has(r.id)} token={token} username={username}
+                                folders={folders} fields={fields} defaultFolder={lastFolder} defaultMedia={lastMedia}
+                                onAdded={onAdded} onWanted={onWanted} onUnwanted={onUnwanted} onPrefsUpdate={handlePrefsUpdate} />
+                            ))}
+                          </>
+                        )}
+
+                        {totalResults === 0 && !error && <div className="empty-state"><p>Inga träffar</p></div>}
+
+                        {pagination?.pages > 1 && (
+                          <div className="pagination">
+                            <button onClick={()=>doSearch(page-1)} disabled={page<=1}>← Föregående</button>
+                            <button onClick={()=>doSearch(page+1)} disabled={page>=pagination.pages}>Nästa →</button>
+                          </div>
+                        )}
                       </>
                     )}
 
-                    {totalResults === 0 && !error && <div className="empty-state"><p>Inga träffar</p></div>}
+                    {searching && <div className="empty-state"><div className="spinner" style={{width:24,height:24}}></div><p>Söker...</p></div>}
 
-                    {pagination?.pages > 1 && (
-                      <div className="pagination">
-                        <button onClick={()=>doSearch(page-1)} disabled={page<=1}>← Föregående</button>
-                        <button onClick={()=>doSearch(page+1)} disabled={page>=pagination.pages}>Nästa →</button>
+                    {!hasSearched && (
+                      <div className="empty-state">
+                        <div className="icon">🎵</div>
+                        <p>Sök på katalognummer, streckkod eller fritext</p>
                       </div>
                     )}
                   </>
                 )}
 
-                {searching && <div className="empty-state"><div className="spinner" style={{width:24,height:24}}></div><p>Söker...</p></div>}
-
-                {!hasSearched && (
-                  <div className="empty-state">
-                    <div className="icon">🎵</div>
-                    <p>Sök på katalognummer, streckkod eller fritext</p>
-                  </div>
-                )}
+                {/* ==================== Wantlist view ==================== */}
+                {activeView === 'wantlist' && (() => {
+                  const wantPages = Math.ceil(wantlistRaw.length / WANTLIST_PAGE_SIZE) || 1;
+                  const wantPage = Math.min(page, wantPages);
+                  const wantSlice = wantlistRaw.slice((wantPage - 1) * WANTLIST_PAGE_SIZE, wantPage * WANTLIST_PAGE_SIZE);
+                  return (
+                    <>
+                      {wantlistRaw.length > 0 && (
+                        <div className="hit-count">{wantlistRaw.length} utgåvor i din wantlist{wantPages > 1 && ` · sida ${wantPage}/${wantPages}`}</div>
+                      )}
+                      {wantSlice.map(w => {
+                        const r = wantToResult(w);
+                        return (
+                          <ResultCard key={r.id} r={r} owned={collectionIds.has(r.id)} wanted={true} token={token} username={username}
+                            folders={folders} fields={fields} defaultFolder={lastFolder} defaultMedia={lastMedia}
+                            onAdded={onAdded} onWanted={onWanted} onUnwanted={onUnwanted} onPrefsUpdate={handlePrefsUpdate} />
+                        );
+                      })}
+                      {wantlistRaw.length === 0 && (
+                        <div className="empty-state">
+                          <div className="icon">♡</div>
+                          <p>Din wantlist är tom</p>
+                        </div>
+                      )}
+                      {wantPages > 1 && (
+                        <div className="pagination">
+                          <button onClick={()=>setPage(Math.max(1, wantPage-1))} disabled={wantPage<=1}>← Föregående</button>
+                          <button onClick={()=>setPage(Math.min(wantPages, wantPage+1))} disabled={wantPage>=wantPages}>Nästa →</button>
+                        </div>
+                      )}
+                    </>
+                  );
+                })()}
               </>
             )}
 
