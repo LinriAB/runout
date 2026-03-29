@@ -3,7 +3,8 @@
     "allow": [
       "Bash(gh repo:*)",
       "Bash(gh api:*)",
-      "Bash(2)"
+      "Bash(2)",
+      "Bash(chmod:*)"
     ]
   }
 }
