@@ -72,12 +72,21 @@
     .search-tab:not(.active) { background: #e5e5ea; color: #666; }
 
     .search-row { display: flex; gap: 8px; margin-bottom: 12px; }
-    .search-row input { flex: 1; }
+    .search-input-wrap { flex: 1; position: relative; display: flex; align-items: center; }
+    .search-input-wrap input { width: 100%; padding-right: 32px; }
+    .search-clear {
+      position: absolute; right: 8px; background: none; border: none; font-size: 18px;
+      color: #999; cursor: pointer; padding: 0 4px; line-height: 1; display: flex; align-items: center;
+    }
+    .search-clear:hover { color: #333; }
     .search-row button {
       padding: 0 20px; background: #4f46e5; color: white; border: none; border-radius: 10px;
       font-size: 14px; font-weight: 600; cursor: pointer; white-space: nowrap;
     }
     .search-row button:disabled { opacity: 0.4; cursor: not-allowed; }
+
+    .clickable-text { cursor: pointer; text-decoration: underline; text-decoration-color: transparent; transition: text-decoration-color 0.2s; }
+    .clickable-text:hover { text-decoration-color: currentColor; }
 
     /* Filters */
     .filters { display: flex; gap: 6px; margin-bottom: 14px; flex-wrap: wrap; }
@@ -383,7 +392,7 @@
     }
 
     // ==================== ResultCard ====================
-    function ResultCard({ r, owned, wanted, hideOwned, collectionInstance, token, username, folders, fields, defaultFolder, defaultMedia, onAdded, onRemoved, onWanted, onUnwanted, onPrefsUpdate }) {
+    function ResultCard({ r, owned, wanted, hideOwned, collectionInstance, token, username, folders, fields, defaultFolder, defaultMedia, onAdded, onRemoved, onWanted, onUnwanted, onPrefsUpdate, onSearchText }) {
       const [showForm, setShowForm] = useState(false);
       const [adding, setAdding] = useState(false);
       const [added, setAdded] = useState(false);
@@ -457,7 +466,13 @@
             <div className="result-info">
               <div className="result-header">
                 <div style={{minWidth:0}}>
-                  <div className="result-title result-title-wrap">{r.title}</div>
+                  <div className="result-title result-title-wrap">{(() => {
+                    const sep = r.title.indexOf(' - ');
+                    if (sep === -1 || !onSearchText) return r.title;
+                    const artist = r.title.slice(0, sep);
+                    const title = r.title.slice(sep + 3);
+                    return <><span className="clickable-text" onClick={()=>onSearchText(artist)}>{artist}</span>{' - '}<span className="clickable-text" onClick={()=>onSearchText(title)}>{title}</span></>;
+                  })()}</div>
                   {r.catno && r.catno !== 'none' && <div className="result-catno">Cat# {r.catno}</div>}
                   {r.label?.length > 0 && <div className="result-label">{r.label.filter(l=>l!=='Not On Label').join(', ')}</div>}
                 </div>
@@ -706,20 +721,22 @@
       };
 
       // ==================== Unified search ====================
-      const doSearch = async (p = 1, extraFilters = {}) => {
-        if (!query.trim() || !token) return;
+      const doSearch = async (p = 1, extraFilters = {}, overrideQuery, overrideType) => {
+        const q = overrideQuery !== undefined ? overrideQuery : query;
+        const st = overrideType !== undefined ? overrideType : searchType;
+        if (!q.trim() || !token) return;
         setSearching(true); setError(''); setHasSearched(true);
 
         // 1. Local search (instant)
-        const local = searchLocal(collectionRaw, query, searchType);
+        const local = searchLocal(collectionRaw, q, st);
         setLocalResults(local);
 
         // 2. API search
         try {
           const params = { type: 'release', page: p, per_page: 20 };
-          if (searchType === 'catno') params.catno = query.trim();
-          else if (searchType === 'barcode') params.barcode = query.trim();
-          else params.q = query.trim();
+          if (st === 'catno') params.catno = q.trim();
+          else if (st === 'barcode') params.barcode = q.trim();
+          else params.q = q.trim();
 
           const ff = extraFilters.format !== undefined ? extraFilters.format : filterFormat;
           const fs = extraFilters.size !== undefined ? extraFilters.size : filterSize;
@@ -760,6 +777,15 @@
           }
         } catch (e) { setError(e.message); setApiResults([]); }
         setSearching(false);
+      };
+
+      const handleSearchText = (text) => {
+        setQuery(text);
+        setSearchType('query');
+        setFilterFormat(''); setFilterSize(''); setFilterYear(''); setFilterCountry('');
+        setAvailableFilters({ years: [], countries: [], formats: [] });
+        setActiveView('search');
+        doSearch(1, { format: '', size: '', year: '', country: '' }, text, 'query');
       };
 
       const handleSubmit = (e) => {
@@ -873,12 +899,15 @@
 
                     {/* Search input */}
                     <form className="search-row" onSubmit={handleSubmit}>
-                      <input type="text" value={query} onChange={e=>setQuery(e.target.value)}
-                        placeholder={
-                          searchType==='catno' ? 'Catalog number, e.g. SBLP 001...'
-                          : searchType==='barcode' ? 'Barcode number...'
-                          : 'Artist, titel...'
-                        } />
+                      <div className="search-input-wrap">
+                        <input type="text" value={query} onChange={e=>setQuery(e.target.value)}
+                          placeholder={
+                            searchType==='catno' ? 'Catalog number, e.g. SBLP 001...'
+                            : searchType==='barcode' ? 'Barcode number...'
+                            : 'Artist, titel...'
+                          } />
+                        {query && <button type="button" className="search-clear" onClick={()=>setQuery('')} aria-label="Clear">×</button>}
+                      </div>
                       <button type="submit" disabled={!query.trim()||searching}>
                         {searching ? <><span className="spinner"></span></> : 'Search'}
                       </button>
@@ -932,7 +961,7 @@
                             {allOwnedApi.map(r => (
                               <ResultCard key={r.id} r={r} owned={true} wanted={wantlistIds.has(r.id)} collectionInstance={collectionMap[r.id]} token={token} username={username}
                                 folders={folders} fields={fields} defaultFolder={lastFolder} defaultMedia={lastMedia}
-                                onAdded={onAdded} onRemoved={onRemoved} onWanted={onWanted} onUnwanted={onUnwanted} onPrefsUpdate={handlePrefsUpdate} />
+                                onAdded={onAdded} onRemoved={onRemoved} onWanted={onWanted} onUnwanted={onUnwanted} onPrefsUpdate={handlePrefsUpdate} onSearchText={handleSearchText} />
                             ))}
                           </>
                         )}
@@ -949,7 +978,7 @@
                             {apiNotOwned.map(r => (
                               <ResultCard key={r.id} r={r} owned={false} wanted={wantlistIds.has(r.id)} token={token} username={username}
                                 folders={folders} fields={fields} defaultFolder={lastFolder} defaultMedia={lastMedia}
-                                onAdded={onAdded} onRemoved={onRemoved} onWanted={onWanted} onUnwanted={onUnwanted} onPrefsUpdate={handlePrefsUpdate} />
+                                onAdded={onAdded} onRemoved={onRemoved} onWanted={onWanted} onUnwanted={onUnwanted} onPrefsUpdate={handlePrefsUpdate} onSearchText={handleSearchText} />
                             ))}
                           </>
                         )}
@@ -997,7 +1026,7 @@
                         return (
                           <ResultCard key={item.instance_id} r={r} owned={true} hideOwned={true} collectionInstance={item} wanted={wantlistIds.has(r.id)} token={token} username={username}
                             folders={folders} fields={fields} defaultFolder={lastFolder} defaultMedia={lastMedia}
-                            onAdded={onAdded} onRemoved={onRemoved} onWanted={onWanted} onUnwanted={onUnwanted} onPrefsUpdate={handlePrefsUpdate} />
+                            onAdded={onAdded} onRemoved={onRemoved} onWanted={onWanted} onUnwanted={onUnwanted} onPrefsUpdate={handlePrefsUpdate} onSearchText={handleSearchText} />
                         );
                       })}
                       {collectionRaw.length === 0 && (
@@ -1037,7 +1066,7 @@
                         return (
                           <ResultCard key={r.id} r={r} owned={collectionIds.has(r.id)} wanted={true} collectionInstance={collectionMap[r.id]} token={token} username={username}
                             folders={folders} fields={fields} defaultFolder={lastFolder} defaultMedia={lastMedia}
-                            onAdded={onAdded} onRemoved={onRemoved} onWanted={onWanted} onUnwanted={onUnwanted} onPrefsUpdate={handlePrefsUpdate} />
+                            onAdded={onAdded} onRemoved={onRemoved} onWanted={onWanted} onUnwanted={onUnwanted} onPrefsUpdate={handlePrefsUpdate} onSearchText={handleSearchText} />
                         );
                       })}
                       {wantlistRaw.length === 0 && (
