@@ -91,6 +91,31 @@
     .collection-meta { display: flex; gap: 10px; flex-wrap: wrap; margin-top: 6px; font-size: 11px; color: #666; }
     .collection-meta span { background: #f0f0f0; padding: 2px 8px; border-radius: 6px; }
 
+    /* Image gallery */
+    .gallery-toggle {
+      width: 100%; border: none; background: none; padding: 8px 0 0; cursor: pointer;
+      font-size: 12px; font-weight: 600; color: #4f46e5; text-align: left;
+    }
+    .gallery { border-top: 1px solid #f0f0f0; margin-top: 10px; padding-top: 12px; }
+    .gallery-viewer { position: relative; width: 100%; aspect-ratio: 1; background: #f9f9f9; border-radius: 10px; overflow: hidden; }
+    .gallery-viewer img { width: 100%; height: 100%; object-fit: contain; }
+    .gallery-nav {
+      position: absolute; top: 50%; transform: translateY(-50%);
+      background: rgba(0,0,0,0.5); color: #fff; border: none; border-radius: 50%;
+      width: 32px; height: 32px; font-size: 16px; cursor: pointer;
+      display: flex; align-items: center; justify-content: center;
+    }
+    .gallery-nav:hover { background: rgba(0,0,0,0.7); }
+    .gallery-nav.prev { left: 8px; }
+    .gallery-nav.next { right: 8px; }
+    .gallery-dots { display: flex; justify-content: center; gap: 6px; margin-top: 8px; }
+    .gallery-dot {
+      width: 8px; height: 8px; border-radius: 50%; border: none; cursor: pointer;
+      background: #ddd; padding: 0; transition: background 0.2s;
+    }
+    .gallery-dot.active { background: #4f46e5; }
+    .gallery-type { text-align: center; font-size: 11px; color: #888; margin-top: 4px; text-transform: capitalize; }
+
     /* Filters */
     .filters { display: flex; gap: 6px; margin-bottom: 14px; flex-wrap: wrap; }
     .filters select { width: auto; flex: 1; min-width: 0; font-size: 12px; padding: 7px 10px; border-radius: 8px; }
@@ -406,6 +431,10 @@
       const [mediaCond, setMediaCond] = useState(defaultMedia || '');
       const [sleeveCond, setSleeveCond] = useState('');
       const [notes, setNotes] = useState('');
+      const [showGallery, setShowGallery] = useState(false);
+      const [images, setImages] = useState(null);
+      const [imgIdx, setImgIdx] = useState(0);
+      const [imgLoading, setImgLoading] = useState(false);
       const isOwned = (owned || added) && !removed;
       const isWanted = wanted || addedWant;
       const formats = [...new Set(r.format || [])];
@@ -517,6 +546,41 @@
             )}
             <a className="btn-discogs" href={`https://www.discogs.com${r.uri || '/release/'+r.id}`} target="_blank" rel="noopener">View on Discogs ↗</a>
           </div>
+
+          {token && <button className="gallery-toggle" onClick={async () => {
+            if (showGallery) { setShowGallery(false); return; }
+            setShowGallery(true);
+            if (images) return;
+            setImgLoading(true);
+            try {
+              const d = await dGet(`/releases/${r.id}`, token);
+              setImages(d.images || []);
+              setImgIdx(0);
+            } catch (e) { setImages([]); }
+            setImgLoading(false);
+          }}>{showGallery ? '▾ Hide images' : '▸ Images'}</button>}
+
+          {showGallery && (
+            <div className="gallery">
+              {imgLoading && <div className="empty-state"><div className="spinner" style={{width:20,height:20}}></div></div>}
+              {images && images.length === 0 && <div style={{fontSize:12,color:'#999',padding:'8px 0'}}>No images available</div>}
+              {images && images.length > 0 && (
+                <>
+                  <div className="gallery-viewer">
+                    <img src={images[imgIdx].uri} alt={images[imgIdx].type || ''} />
+                    {images.length > 1 && <>
+                      <button className="gallery-nav prev" onClick={()=>setImgIdx(i => i > 0 ? i-1 : images.length-1)}>‹</button>
+                      <button className="gallery-nav next" onClick={()=>setImgIdx(i => i < images.length-1 ? i+1 : 0)}>›</button>
+                    </>}
+                  </div>
+                  <div className="gallery-dots">
+                    {images.map((_,i) => <button key={i} className={`gallery-dot ${i===imgIdx ? 'active' : ''}`} onClick={()=>setImgIdx(i)} />)}
+                  </div>
+                  <div className="gallery-type">{images[imgIdx].type}{images.length > 1 && ` (${imgIdx+1}/${images.length})`}</div>
+                </>
+              )}
+            </div>
+          )}
 
           {showForm && !isOwned && (
             <div className="add-form">
