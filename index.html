@@ -88,6 +88,9 @@
     .clickable-text { cursor: pointer; text-decoration: underline; text-decoration-color: transparent; transition: text-decoration-color 0.2s; }
     .clickable-text:hover { text-decoration-color: currentColor; }
 
+    .collection-meta { display: flex; gap: 10px; flex-wrap: wrap; margin-top: 6px; font-size: 11px; color: #666; }
+    .collection-meta span { background: #f0f0f0; padding: 2px 8px; border-radius: 6px; }
+
     /* Filters */
     .filters { display: flex; gap: 6px; margin-bottom: 14px; flex-wrap: wrap; }
     .filters select { width: auto; flex: 1; min-width: 0; font-size: 12px; padding: 7px 10px; border-radius: 8px; }
@@ -487,6 +490,18 @@
                 {r.year && r.year !== '0' && <span className="meta-text">{r.year}</span>}
                 {r.country && <span className="meta-text">· {r.country}</span>}
               </div>
+              {isOwned && collectionInstance && (() => {
+                const notes = collectionInstance.notes || [];
+                const media = notes.find(n => n.field_id === 1)?.value;
+                const sleeve = notes.find(n => n.field_id === 2)?.value;
+                const folderName = folders.find(f => String(f.id) === String(collectionInstance.folder_id))?.name;
+                if (!media && !sleeve && !folderName) return null;
+                return <div className="collection-meta">
+                  {media && <span>Media: {media}</span>}
+                  {sleeve && <span>Sleeve: {sleeve}</span>}
+                  {folderName && <span>📁 {folderName}</span>}
+                </div>;
+              })()}
             </div>
           </div>
 
@@ -900,7 +915,9 @@
                     {/* Search input */}
                     <form className="search-row" onSubmit={handleSubmit}>
                       <div className="search-input-wrap">
-                        <input type="text" value={query} onChange={e=>setQuery(e.target.value)}
+                        <input type="text" value={query}
+                          onChange={e=>setQuery(searchType==='catno' ? e.target.value.toUpperCase() : e.target.value)}
+                          style={searchType==='catno' ? {textTransform:'uppercase'} : {}}
                           placeholder={
                             searchType==='catno' ? 'Catalog number, e.g. SBLP 001...'
                             : searchType==='barcode' ? 'Barcode number...'
