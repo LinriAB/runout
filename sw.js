@@ -35,7 +35,21 @@ self.addEventListener('fetch', e => {
     return;
   }
 
-  // Cache-first for static assets
+  // HTML navigation: network-first, fallback to cached index.html
+  if (e.request.mode === 'navigate') {
+    e.respondWith(
+      fetch(e.request)
+        .then(r => {
+          const clone = r.clone();
+          caches.open(CACHE_NAME).then(c => c.put(e.request, clone));
+          return r;
+        })
+        .catch(() => caches.match('./index.html'))
+    );
+    return;
+  }
+
+  // Static assets: cache-first, fallback to network
   e.respondWith(
     caches.match(e.request).then(cached => cached || fetch(e.request))
   );

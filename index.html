@@ -908,14 +908,14 @@
                 try {
                   const pages = [];
                   let vp = 1;
-                  while (true) {
+                  while (vp <= 5) { // cap at 500 versions per master
                     const vd = await dGet(`/masters/${mid}/versions`, token, { per_page: 100, page: vp });
                     pages.push(...(vd.versions || []));
                     if (vp >= (vd.pagination?.pages || 1)) break;
                     vp++;
                   }
                   return pages;
-                } catch { return []; }
+                } catch (e) { return []; }
               })
             );
             allVersions = versionResults.flat();
@@ -963,15 +963,16 @@
           if (p === 1 && !ff && !fs && !fy && !fc) {
             setAvailableFilters(extractFilterOptions(finalResults));
           }
-        } catch (e) { setError(e.message); setApiResults([]); }
-        setSearching(false);
+        } catch (e) { setError(e.message); setApiResults([]); } finally {
+          setSearching(false);
+        }
       };
 
       const handleSearchText = (text) => {
         setQuery(text);
         setSearchType('query');
         setFilterFormat(''); setFilterSize(''); setFilterYear(''); setFilterCountry(''); setFilterLabel('');
-        setAvailableFilters({ years: [], countries: [], formats: [] });
+        setAvailableFilters({ years: [], countries: [], formats: [], labels: [] });
         setActiveView('search');
         doSearch(1, { format: '', size: '', year: '', country: '' }, text, 'query');
       };
@@ -979,7 +980,7 @@
       const handleSubmit = (e) => {
         e.preventDefault();
         setFilterFormat(''); setFilterSize(''); setFilterYear(''); setFilterCountry(''); setFilterLabel('');
-        setAvailableFilters({ years: [], countries: [], formats: [] });
+        setAvailableFilters({ years: [], countries: [], formats: [], labels: [] });
         doSearch(1, { format: '', size: '', year: '', country: '' });
       };
 
@@ -1052,9 +1053,14 @@
       collectionRaw.forEach(item => { if (!collectionMap[item.basic_information.id]) collectionMap[item.basic_information.id] = item; });
 
       // Client-side filtering for catno searches (already have full dataset)
+      const sizes = ['12"', '7"', '10"'];
       const filtered = (searchType === 'catno') ? apiResults.filter(r => {
         if (filterFormat && !(r.format || []).some(f => f === filterFormat)) return false;
-        if (filterSize && !(r.format || []).some(f => f.includes(filterSize))) return false;
+        if (filterSize) {
+          const fmts = r.format || [];
+          const hasAnySize = fmts.some(f => sizes.some(s => f.includes(s)));
+          if (hasAnySize && !fmts.some(f => f.includes(filterSize))) return false;
+        }
         if (filterYear && r.year !== filterYear) return false;
         if (filterCountry && r.country !== filterCountry) return false;
         if (filterLabel && !(r.label || []).some(l => l === filterLabel)) return false;
