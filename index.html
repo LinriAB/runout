@@ -255,58 +255,120 @@
       'Very Good (VG)', 'Good Plus (G+)', 'Good (G)', 'Fair (F)', 'Poor (P)'
     ];
 
-    // ==================== Persistence ====================
-    const SETTINGS_KEY = "runout_settings";
-    const PREFS_KEY = "runout_prefs";
-    const COLLECTION_KEY = "runout_collection";
-    const COLLECTION_META_KEY = "runout_collection_meta";
-    const WANTLIST_KEY = "runout_wantlist";
-    const WANTLIST_META_KEY = "runout_wantlist_meta";
+    // ==================== Persistence (per-account) ====================
+    const ACTIVE_KEY = "runout_active";
+    const ACCOUNTS_KEY = "runout_accounts";
+
+    function userKey(username, suffix) { return `runout_${username}_${suffix}`; }
 
     function saveSettings(token, username) {
-      try { localStorage.setItem(SETTINGS_KEY, JSON.stringify({ token, username })); } catch(e) {}
+      try {
+        localStorage.setItem(ACTIVE_KEY, JSON.stringify({ token, username }));
+        // Track known accounts
+        const accounts = loadAccounts();
+        if (!accounts.find(a => a.username === username)) {
+          accounts.push({ username, token });
+          localStorage.setItem(ACCOUNTS_KEY, JSON.stringify(accounts));
+        } else {
+          // Update token if changed
+          const updated = accounts.map(a => a.username === username ? { ...a, token } : a);
+          localStorage.setItem(ACCOUNTS_KEY, JSON.stringify(updated));
+        }
+      } catch(e) {}
     }
     function loadSettings() {
-      try { return JSON.parse(localStorage.getItem(SETTINGS_KEY)) || {}; } catch(e) { return {}; }
+      try { return JSON.parse(localStorage.getItem(ACTIVE_KEY)) || {}; } catch(e) { return {}; }
     }
-    function clearAllData() {
-      try { [SETTINGS_KEY, PREFS_KEY, COLLECTION_KEY, COLLECTION_META_KEY, WANTLIST_KEY, WANTLIST_META_KEY].forEach(k => localStorage.removeItem(k)); } catch(e) {}
+    function loadAccounts() {
+      try { return JSON.parse(localStorage.getItem(ACCOUNTS_KEY)) || []; } catch(e) { return []; }
     }
-    function savePrefs(prefs) {
-      try { localStorage.setItem(PREFS_KEY, JSON.stringify(prefs)); } catch(e) {}
+    function removeAccount(username) {
+      try {
+        const accounts = loadAccounts().filter(a => a.username !== username);
+        localStorage.setItem(ACCOUNTS_KEY, JSON.stringify(accounts));
+        // Clean up per-user data
+        ['collection', 'collection_meta', 'wantlist', 'wantlist_meta', 'prefs'].forEach(s => {
+          localStorage.removeItem(userKey(username, s));
+        });
+      } catch(e) {}
     }
-    function loadPrefs() {
-      try { return JSON.parse(localStorage.getItem(PREFS_KEY)) || {}; } catch(e) { return {}; }
+    function clearActiveSession() {
+      try { localStorage.removeItem(ACTIVE_KEY); } catch(e) {}
+    }
+    function savePrefs(prefs, username) {
+      try { localStorage.setItem(userKey(username, 'prefs'), JSON.stringify(prefs)); } catch(e) {}
+    }
+    function loadPrefs(username) {
+      try { return JSON.parse(localStorage.getItem(userKey(username, 'prefs'))) || {}; } catch(e) { return {}; }
     }
     function saveCachedCollection(items, username) {
       try {
-        localStorage.setItem(COLLECTION_KEY, JSON.stringify(items));
-        localStorage.setItem(COLLECTION_META_KEY, JSON.stringify({ username, ts: Date.now(), count: items.length }));
+        localStorage.setItem(userKey(username, 'collection'), JSON.stringify(items));
+        localStorage.setItem(userKey(username, 'collection_meta'), JSON.stringify({ ts: Date.now(), count: items.length }));
       } catch(e) { console.warn('Cache full:', e.message); }
     }
     function loadCachedCollection(username) {
       try {
-        const meta = JSON.parse(localStorage.getItem(COLLECTION_META_KEY));
-        if (!meta || meta.username !== username) return null;
-        const items = JSON.parse(localStorage.getItem(COLLECTION_KEY));
+        const meta = JSON.parse(localStorage.getItem(userKey(username, 'collection_meta')));
+        if (!meta) return null;
+        const items = JSON.parse(localStorage.getItem(userKey(username, 'collection')));
         return { items, ts: meta.ts, count: meta.count };
       } catch(e) { return null; }
     }
-
     function saveCachedWantlist(items, username) {
       try {
-        localStorage.setItem(WANTLIST_KEY, JSON.stringify(items));
-        localStorage.setItem(WANTLIST_META_KEY, JSON.stringify({ username, ts: Date.now(), count: items.length }));
+        localStorage.setItem(userKey(username, 'wantlist'), JSON.stringify(items));
+        localStorage.setItem(userKey(username, 'wantlist_meta'), JSON.stringify({ ts: Date.now(), count: items.length }));
       } catch(e) { console.warn('Wantlist cache full:', e.message); }
     }
     function loadCachedWantlist(username) {
       try {
-        const meta = JSON.parse(localStorage.getItem(WANTLIST_META_KEY));
-        if (!meta || meta.username !== username) return null;
-        const items = JSON.parse(localStorage.getItem(WANTLIST_KEY));
+        const meta = JSON.parse(localStorage.getItem(userKey(username, 'wantlist_meta')));
+        if (!meta) return null;
+        const items = JSON.parse(localStorage.getItem(userKey(username, 'wantlist')));
         return { items, ts: meta.ts, count: meta.count };
       } catch(e) { return null; }
     }
+
+    // Migrate old global keys to per-user keys (one-time)
+    (function migrateOldKeys() {
+      try {
+        const old = JSON.parse(localStorage.getItem('runout_settings'));
+        if (!old || !old.username) return;
+        const un = old.username;
+        // Migrate collection
+        const coll = localStorage.getItem('runout_collection');
+        const collMeta = localStorage.getItem('runout_collection_meta');
+        if (coll && !localStorage.getItem(userKey(un, 'collection'))) {
+          localStorage.setItem(userKey(un, 'collection'), coll);
+          if (collMeta) localStorage.setItem(userKey(un, 'collection_meta'), collMeta);
+        }
+        // Migrate wantlist
+        const want = localStorage.getItem('runout_wantlist');
+        const wantMeta = localStorage.getItem('runout_wantlist_meta');
+        if (want && !localStorage.getItem(userKey(un, 'wantlist'))) {
+          localStorage.setItem(userKey(un, 'wantlist'), want);
+          if (wantMeta) localStorage.setItem(userKey(un, 'wantlist_meta'), wantMeta);
+        }
+        // Migrate prefs
+        const prefs = localStorage.getItem('runout_prefs');
+        if (prefs && !localStorage.getItem(userKey(un, 'prefs'))) {
+          localStorage.setItem(userKey(un, 'prefs'), prefs);
+        }
+        // Migrate active session
+        if (!localStorage.getItem(ACTIVE_KEY)) {
+          localStorage.setItem(ACTIVE_KEY, JSON.stringify(old));
+        }
+        // Save to accounts list
+        if (!loadAccounts().find(a => a.username === un)) {
+          const accs = loadAccounts();
+          accs.push({ username: un, token: old.token });
+          localStorage.setItem(ACCOUNTS_KEY, JSON.stringify(accs));
+        }
+        // Remove old keys
+        ['runout_settings','runout_collection','runout_collection_meta','runout_wantlist','runout_wantlist_meta','runout_prefs'].forEach(k => localStorage.removeItem(k));
+      } catch(e) {}
+    })();
 
     // ==================== API ====================
     async function dGet(path, token, params = {}) {
@@ -752,7 +814,7 @@
     // ==================== Main App ====================
     function App() {
       const saved = loadSettings();
-      const prefs = loadPrefs();
+      const prefs = loadPrefs(saved.username || '');
       const [token, setToken] = useState(saved.token || '');
       const [username, setUsername] = useState(saved.username || '');
       const [connected, setConnected] = useState(false);
@@ -849,13 +911,26 @@
         setConnected(false); setCollectionRaw([]); setCollectionIds(new Set());
         setWantlistIds(new Set()); setWantlistRaw([]);
         setFolders([]); setFields([]); setToken(''); setUsername('');
-        setCacheInfo(null); clearAllData(); setSettingsOpen(true);
+        setCacheInfo(null); clearActiveSession(); setSettingsOpen(true);
       };
+
+      const handleDeleteAccount = () => {
+        if (!confirm(`Delete all cached data for "${username}"?`)) return;
+        removeAccount(username);
+        handleDisconnect();
+      };
+
+      const handleSwitchAccount = (acct) => {
+        setToken(acct.token);
+        setUsername(acct.username);
+      };
+
+      const accounts = loadAccounts();
 
       const handlePrefsUpdate = (p) => {
         if (p.lastFolder) setLastFolder(p.lastFolder);
         if (p.lastMedia) setLastMedia(p.lastMedia);
-        savePrefs({ ...loadPrefs(), ...p });
+        savePrefs({ ...loadPrefs(username), ...p }, username);
       };
 
       // ==================== Unified search ====================
@@ -1119,7 +1194,22 @@
                   </button>
                   {connected && cacheInfo && <div className="cache-msg">Cached: {cacheInfo.count} records, updated {timeAgo(cacheInfo.ts)}</div>}
                   {connected && <button className="btn-secondary" onClick={handleRefresh} disabled={collLoading}>Refresh collection from Discogs</button>}
-                  {connected && <button className="btn-danger" onClick={handleDisconnect}>Log out & clear all data</button>}
+                  {connected && <button className="btn-secondary" onClick={handleDisconnect}>Switch account</button>}
+                  {connected && <button className="btn-danger" onClick={handleDeleteAccount}>Delete cached data &amp; log out</button>}
+                  {!connected && accounts.length > 0 && (
+                    <div style={{marginTop:12}}>
+                      <label>Saved accounts</label>
+                      <div style={{display:'flex',flexDirection:'column',gap:6,marginTop:4}}>
+                        {accounts.map(a => (
+                          <button key={a.username} className="btn-secondary" style={{marginTop:0,display:'flex',justifyContent:'space-between',alignItems:'center'}}
+                            onClick={() => { handleSwitchAccount(a); handleConnect(a.token, a.username); }}>
+                            <span>{a.username}</span>
+                            <span style={{fontSize:11,color:'#999'}}>tap to connect</span>
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+                  )}
                 </div>
               )}
             </div>
