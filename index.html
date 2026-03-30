@@ -97,8 +97,9 @@
       font-size: 12px; font-weight: 600; color: #4f46e5; text-align: left;
     }
     .gallery { border-top: 1px solid #f0f0f0; margin-top: 10px; padding-top: 12px; }
-    .gallery-viewer { position: relative; width: 100%; aspect-ratio: 1; background: #f9f9f9; border-radius: 10px; overflow: hidden; }
+    .gallery-viewer { position: relative; width: 100%; aspect-ratio: 1; background: #f9f9f9; border-radius: 10px; overflow: hidden; display: flex; align-items: center; justify-content: center; }
     .gallery-viewer img { width: 100%; height: 100%; object-fit: contain; }
+    .gallery-viewer .gallery-loading { position: absolute; }
     .gallery-nav {
       position: absolute; top: 50%; transform: translateY(-50%);
       background: rgba(0,0,0,0.5); color: #fff; border: none; border-radius: 50%;
@@ -106,6 +107,7 @@
       display: flex; align-items: center; justify-content: center;
     }
     .gallery-nav:hover { background: rgba(0,0,0,0.7); }
+    .gallery-nav:active { transform: translateY(-50%) scale(0.9); background: rgba(0,0,0,0.8); }
     .gallery-nav.prev { left: 8px; }
     .gallery-nav.next { right: 8px; }
     .gallery-dots { display: flex; justify-content: center; gap: 6px; margin-top: 8px; }
@@ -410,6 +412,33 @@
       };
     }
 
+    function extractCollectionFilterOptions(items) {
+      const years = new Set(), formats = new Set(), labels = new Set(), folders = new Set();
+      items.forEach(item => {
+        const info = item.basic_information;
+        if (info.year > 0) years.add(String(info.year));
+        (info.formats || []).forEach(f => { formats.add(f.name); (f.descriptions || []).forEach(d => formats.add(d)); });
+        (info.labels || []).forEach(l => { if (l.name && l.name !== 'Not On Label') labels.add(l.name); });
+      });
+      return {
+        years: [...years].sort((a, b) => b - a),
+        formats: [...formats].sort(),
+        labels: [...labels].sort(),
+      };
+    }
+
+    function filterCollectionItem(item, filters) {
+      const info = item.basic_information;
+      if (filters.format) {
+        const fmts = (info.formats || []).flatMap(f => [f.name, ...(f.descriptions || [])]);
+        if (!fmts.includes(filters.format)) return false;
+      }
+      if (filters.year && String(info.year) !== filters.year) return false;
+      if (filters.label && !(info.labels || []).some(l => l.name === filters.label)) return false;
+      if (filters.folder && String(item.folder_id) !== filters.folder) return false;
+      return true;
+    }
+
     function timeAgo(ts) {
       const mins = Math.floor((Date.now() - ts) / 60000);
       if (mins < 1) return 'just now';
@@ -447,13 +476,14 @@
       const [addedWant, setAddedWant] = useState(false);
       const [removed, setRemoved] = useState(false);
       const [folderId, setFolderId] = useState(defaultFolder || '1');
-      const [mediaCond, setMediaCond] = useState(defaultMedia || '');
+      const [mediaCond, setMediaCond] = useState('');
       const [sleeveCond, setSleeveCond] = useState('');
       const [notes, setNotes] = useState('');
       const [showGallery, setShowGallery] = useState(false);
       const [images, setImages] = useState(null);
       const [imgIdx, setImgIdx] = useState(0);
       const [imgLoading, setImgLoading] = useState(false);
+      const [imgRendering, setImgRendering] = useState(false);
       const isOwned = (owned || added) && !removed;
       const isWanted = wanted || addedWant;
       const formats = [...new Set(r.format || [])];
@@ -555,7 +585,7 @@
 
           <div className="result-actions">
             {!isOwned && token && username && !showForm && (
-              <button className="btn-add" onClick={() => setShowForm(true)}>+ Add to collection</button>
+              <button className="btn-add" onClick={() => { setShowGallery(false); setShowForm(true); }}>+ Add to collection</button>
             )}
             {isOwned && hideOwned && collectionInstance && (
               <button className="btn-add" style={{flex:'none',background:'#dc2626'}} onClick={handleRemoveFromCollection}>Remove</button>
@@ -586,14 +616,15 @@
               {images && images.length > 0 && (
                 <>
                   <div className="gallery-viewer">
-                    <img src={images[imgIdx].uri} alt={images[imgIdx].type || ''} />
+                    {imgRendering && <div className="gallery-loading"><div className="spinner" style={{width:24,height:24}}></div></div>}
+                    <img src={images[imgIdx].uri} alt={images[imgIdx].type || ''} onLoad={()=>setImgRendering(false)} onError={()=>setImgRendering(false)} />
                     {images.length > 1 && <>
-                      <button className="gallery-nav prev" onClick={()=>setImgIdx(i => i > 0 ? i-1 : images.length-1)}>‹</button>
-                      <button className="gallery-nav next" onClick={()=>setImgIdx(i => i < images.length-1 ? i+1 : 0)}>›</button>
+                      <button className="gallery-nav prev" onClick={()=>{ setImgRendering(true); setImgIdx(i => i > 0 ? i-1 : images.length-1); }}>‹</button>
+                      <button className="gallery-nav next" onClick={()=>{ setImgRendering(true); setImgIdx(i => i < images.length-1 ? i+1 : 0); }}>›</button>
                     </>}
                   </div>
                   <div className="gallery-dots">
-                    {images.map((_,i) => <button key={i} className={`gallery-dot ${i===imgIdx ? 'active' : ''}`} onClick={()=>setImgIdx(i)} />)}
+                    {images.map((_,i) => <button key={i} className={`gallery-dot ${i===imgIdx ? 'active' : ''}`} onClick={()=>{ setImgRendering(true); setImgIdx(i); }} />)}
                   </div>
                   <div className="gallery-type">{images[imgIdx].type}{images.length > 1 && ` (${imgIdx+1}/${images.length})`}</div>
                 </>
@@ -752,6 +783,10 @@
       const [pagination, setPagination] = useState(null);
       const [page, setPage] = useState(1);
       const [availableFilters, setAvailableFilters] = useState({ years: [], countries: [], formats: [], labels: [] });
+
+      // Collection/Wantlist filters
+      const [collFilter, setCollFilter] = useState({ format: '', year: '', label: '', folder: '' });
+      const [wantFilter, setWantFilter] = useState({ format: '', year: '', label: '' });
 
       const [lastFolder, setLastFolder] = useState(prefs.lastFolder || '1');
       const [lastMedia, setLastMedia] = useState(prefs.lastMedia || '');
@@ -1174,19 +1209,44 @@
 
                 {/* ==================== Collection view ==================== */}
                 {activeView === 'collection' && (() => {
-                  const collSorted = [...collectionRaw].sort((a, b) => {
+                  const collFiltered = collectionRaw.filter(item => filterCollectionItem(item, collFilter));
+                  const collSorted = [...collFiltered].sort((a, b) => {
                     const aInfo = a.basic_information, bInfo = b.basic_information;
                     const aStr = ((aInfo.artists || []).map(x => x.name).join(', ') + ' ' + aInfo.title).toLowerCase();
                     const bStr = ((bInfo.artists || []).map(x => x.name).join(', ') + ' ' + bInfo.title).toLowerCase();
                     return aStr.localeCompare(bStr);
                   });
+                  const collOpts = extractCollectionFilterOptions(collectionRaw);
                   const collPages = Math.ceil(collSorted.length / LIST_PAGE_SIZE) || 1;
                   const collPage = Math.min(page, collPages);
                   const collSlice = collSorted.slice((collPage - 1) * LIST_PAGE_SIZE, collPage * LIST_PAGE_SIZE);
+                  const hasCollFilter = collFilter.format || collFilter.year || collFilter.label || collFilter.folder;
                   return (
                     <>
                       {collectionRaw.length > 0 && (
-                        <div className="hit-count">{collectionRaw.length} releases in your collection{collPages > 1 && ` · page ${collPage}/${collPages}`}</div>
+                        <div className="filters">
+                          <select value={collFilter.format} onChange={e => { setCollFilter(f => ({...f, format: e.target.value})); setPage(1); }} className={collFilter.format?'filter-active':''}>
+                            <option value="">Format...</option>
+                            {collOpts.formats.filter(f => !['12"','7"','10"','LP'].includes(f)).map(f => <option key={f} value={f}>{f}</option>)}
+                          </select>
+                          <select value={collFilter.year} onChange={e => { setCollFilter(f => ({...f, year: e.target.value})); setPage(1); }} className={collFilter.year?'filter-active':''}>
+                            <option value="">Year...</option>
+                            {collOpts.years.map(y => <option key={y} value={y}>{y}</option>)}
+                          </select>
+                          <select value={collFilter.label} onChange={e => { setCollFilter(f => ({...f, label: e.target.value})); setPage(1); }} className={collFilter.label?'filter-active':''}>
+                            <option value="">Label...</option>
+                            {collOpts.labels.map(l => <option key={l} value={l}>{l}</option>)}
+                          </select>
+                          {folders.length > 0 && (
+                            <select value={collFilter.folder} onChange={e => { setCollFilter(f => ({...f, folder: e.target.value})); setPage(1); }} className={collFilter.folder?'filter-active':''}>
+                              <option value="">Folder...</option>
+                              {folders.map(f => <option key={f.id} value={String(f.id)}>{f.name} ({f.count})</option>)}
+                            </select>
+                          )}
+                        </div>
+                      )}
+                      {collectionRaw.length > 0 && (
+                        <div className="hit-count">{hasCollFilter ? `${collSorted.length} of ${collectionRaw.length}` : collectionRaw.length} releases in your collection{collPages > 1 && ` · page ${collPage}/${collPages}`}</div>
                       )}
                       {collSlice.map(item => {
                         const r = itemToResult(item);
@@ -1202,6 +1262,9 @@
                           <p>Your collection is empty</p>
                         </div>
                       )}
+                      {collSorted.length > 0 && collSlice.length === 0 && (
+                        <div className="empty-state"><p>No matches for current filters</p></div>
+                      )}
                       {collPages > 1 && (
                         <div className="pagination">
                           <button onClick={()=>setPage(Math.max(1, collPage-1))} disabled={collPage<=1}>← Previous</button>
@@ -1214,19 +1277,38 @@
 
                 {/* ==================== Wantlist view ==================== */}
                 {activeView === 'wantlist' && (() => {
-                  const wantSorted = [...wantlistRaw].sort((a, b) => {
+                  const wantFiltered = wantlistRaw.filter(item => filterCollectionItem(item, wantFilter));
+                  const wantSorted = [...wantFiltered].sort((a, b) => {
                     const aInfo = a.basic_information, bInfo = b.basic_information;
                     const aStr = ((aInfo.artists || []).map(x => x.name).join(', ') + ' ' + aInfo.title).toLowerCase();
                     const bStr = ((bInfo.artists || []).map(x => x.name).join(', ') + ' ' + bInfo.title).toLowerCase();
                     return aStr.localeCompare(bStr);
                   });
+                  const wantOpts = extractCollectionFilterOptions(wantlistRaw);
                   const wantPages = Math.ceil(wantSorted.length / LIST_PAGE_SIZE) || 1;
                   const wantPage = Math.min(page, wantPages);
                   const wantSlice = wantSorted.slice((wantPage - 1) * LIST_PAGE_SIZE, wantPage * LIST_PAGE_SIZE);
+                  const hasWantFilter = wantFilter.format || wantFilter.year || wantFilter.label;
                   return (
                     <>
                       {wantlistRaw.length > 0 && (
-                        <div className="hit-count">{wantlistRaw.length} releases in your wantlist{wantPages > 1 && ` · page ${wantPage}/${wantPages}`}</div>
+                        <div className="filters">
+                          <select value={wantFilter.format} onChange={e => { setWantFilter(f => ({...f, format: e.target.value})); setPage(1); }} className={wantFilter.format?'filter-active':''}>
+                            <option value="">Format...</option>
+                            {wantOpts.formats.filter(f => !['12"','7"','10"','LP'].includes(f)).map(f => <option key={f} value={f}>{f}</option>)}
+                          </select>
+                          <select value={wantFilter.year} onChange={e => { setWantFilter(f => ({...f, year: e.target.value})); setPage(1); }} className={wantFilter.year?'filter-active':''}>
+                            <option value="">Year...</option>
+                            {wantOpts.years.map(y => <option key={y} value={y}>{y}</option>)}
+                          </select>
+                          <select value={wantFilter.label} onChange={e => { setWantFilter(f => ({...f, label: e.target.value})); setPage(1); }} className={wantFilter.label?'filter-active':''}>
+                            <option value="">Label...</option>
+                            {wantOpts.labels.map(l => <option key={l} value={l}>{l}</option>)}
+                          </select>
+                        </div>
+                      )}
+                      {wantlistRaw.length > 0 && (
+                        <div className="hit-count">{hasWantFilter ? `${wantSorted.length} of ${wantlistRaw.length}` : wantlistRaw.length} releases in your wantlist{wantPages > 1 && ` · page ${wantPage}/${wantPages}`}</div>
                       )}
                       {wantSlice.map(w => {
                         const r = itemToResult(w);
@@ -1241,6 +1323,9 @@
                           <div className="icon">♡</div>
                           <p>Your wantlist is empty</p>
                         </div>
+                      )}
+                      {wantSorted.length > 0 && wantSlice.length === 0 && (
+                        <div className="empty-state"><p>No matches for current filters</p></div>
                       )}
                       {wantPages > 1 && (
                         <div className="pagination">
