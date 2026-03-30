@@ -116,6 +116,23 @@
     .gallery-dot.active { background: #4f46e5; }
     .gallery-type { text-align: center; font-size: 11px; color: #888; margin-top: 4px; text-transform: capitalize; }
 
+    /* Versions */
+    .versions { border-top: 1px solid #f0f0f0; margin-top: 10px; padding-top: 8px; }
+    .version-item {
+      display: flex; align-items: center; gap: 10px; padding: 8px 0;
+      border-bottom: 1px solid #f5f5f5; font-size: 12px;
+    }
+    .version-item:last-child { border-bottom: none; }
+    .version-item img { width: 36px; height: 36px; border-radius: 6px; object-fit: cover; flex-shrink: 0; }
+    .version-info { flex: 1; min-width: 0; }
+    .version-catno { font-weight: 600; color: #1d1d1f; }
+    .version-detail { color: #888; font-size: 11px; }
+    .version-owned { background: #dcfce7; color: #16a34a; font-size: 10px; font-weight: 700; padding: 1px 6px; border-radius: 10px; flex-shrink: 0; }
+    .versions-more {
+      width: 100%; border: none; background: none; padding: 8px 0; cursor: pointer;
+      font-size: 12px; font-weight: 600; color: #4f46e5; text-align: center;
+    }
+
     /* Filters */
     .filters { display: flex; gap: 6px; margin-bottom: 14px; flex-wrap: wrap; }
     .filters select { width: auto; flex: 1; min-width: 0; font-size: 12px; padding: 7px 10px; border-radius: 8px; }
@@ -378,16 +395,18 @@
     }
 
     function extractFilterOptions(results) {
-      const years = new Set(), countries = new Set(), formats = new Set();
+      const years = new Set(), countries = new Set(), formats = new Set(), labels = new Set();
       results.forEach(r => {
         if (r.year && r.year !== '0') years.add(r.year);
         if (r.country) countries.add(r.country);
         (r.format || []).forEach(f => formats.add(f));
+        (r.label || []).forEach(l => { if (l && l !== 'Not On Label') labels.add(l); });
       });
       return {
         years: [...years].sort((a, b) => b - a),
         countries: [...countries].sort(),
-        formats: [...formats].sort()
+        formats: [...formats].sort(),
+        labels: [...labels].sort()
       };
     }
 
@@ -721,6 +740,7 @@
       const [filterSize, setFilterSize] = useState('');
       const [filterYear, setFilterYear] = useState('');
       const [filterCountry, setFilterCountry] = useState('');
+      const [filterLabel, setFilterLabel] = useState('');
 
       // API results from Discogs search
       const [apiResults, setApiResults] = useState([]);
@@ -731,7 +751,7 @@
       const [error, setError] = useState('');
       const [pagination, setPagination] = useState(null);
       const [page, setPage] = useState(1);
-      const [availableFilters, setAvailableFilters] = useState({ years: [], countries: [], formats: [] });
+      const [availableFilters, setAvailableFilters] = useState({ years: [], countries: [], formats: [], labels: [] });
 
       const [lastFolder, setLastFolder] = useState(prefs.lastFolder || '1');
       const [lastMedia, setLastMedia] = useState(prefs.lastMedia || '');
@@ -839,20 +859,70 @@
             });
           }
 
+          // For catno/barcode searches: expand all versions from master releases
+          const expandVersions = (st === 'catno' || st === 'barcode');
+          const masterIds = expandVersions ? [...new Set(res.filter(r => r.master_id).map(r => r.master_id))] : [];
+          let allVersions = [];
+          if (masterIds.length > 0) {
+            const versionResults = await Promise.all(
+              masterIds.map(async mid => {
+                try {
+                  const pages = [];
+                  let vp = 1;
+                  while (true) {
+                    const vd = await dGet(`/masters/${mid}/versions`, token, { per_page: 100, page: vp });
+                    pages.push(...(vd.versions || []));
+                    if (vp >= (vd.pagination?.pages || 1)) break;
+                    vp++;
+                  }
+                  return pages;
+                } catch { return []; }
+              })
+            );
+            allVersions = versionResults.flat();
+          }
+
+          // Convert versions to ResultCard-compatible shape, keyed by release id
+          const searchById = {};
+          res.forEach(r => { searchById[r.id] = r; });
+
+          const versionResults = allVersions.map(v => {
+            // If we already have this from search results, prefer that (richer data)
+            if (searchById[v.id]) return searchById[v.id];
+            return {
+              id: v.id,
+              title: v.title || '',
+              cover_image: v.thumb || '',
+              catno: v.catno || '',
+              label: v.label ? [v.label] : [],
+              format: v.format ? v.format.split(', ') : [],
+              year: v.released || '',
+              country: v.country || '',
+              uri: '/release/' + v.id,
+              master_id: null, // prevent nested version fetches
+            };
+          });
+
+          // Merge: search results + versions, deduplicated by id
+          const merged = {};
+          res.forEach(r => { merged[r.id] = r; });
+          versionResults.forEach(r => { if (!merged[r.id]) merged[r.id] = r; });
+          let finalResults = Object.values(merged);
+
           // Sort: owned first
           const ownedIds = collectionIds;
-          res.sort((a, b) => {
+          finalResults.sort((a, b) => {
             const aOwned = ownedIds.has(a.id) ? 0 : 1;
             const bOwned = ownedIds.has(b.id) ? 0 : 1;
             return aOwned - bOwned;
           });
 
-          setApiResults(res);
+          setApiResults(finalResults);
           setPagination(d.pagination || null);
           setPage(p);
 
           if (p === 1 && !ff && !fs && !fy && !fc) {
-            setAvailableFilters(extractFilterOptions(d.results || []));
+            setAvailableFilters(extractFilterOptions(finalResults));
           }
         } catch (e) { setError(e.message); setApiResults([]); }
         setSearching(false);
@@ -861,7 +931,7 @@
       const handleSearchText = (text) => {
         setQuery(text);
         setSearchType('query');
-        setFilterFormat(''); setFilterSize(''); setFilterYear(''); setFilterCountry('');
+        setFilterFormat(''); setFilterSize(''); setFilterYear(''); setFilterCountry(''); setFilterLabel('');
         setAvailableFilters({ years: [], countries: [], formats: [] });
         setActiveView('search');
         doSearch(1, { format: '', size: '', year: '', country: '' }, text, 'query');
@@ -869,7 +939,7 @@
 
       const handleSubmit = (e) => {
         e.preventDefault();
-        setFilterFormat(''); setFilterSize(''); setFilterYear(''); setFilterCountry('');
+        setFilterFormat(''); setFilterSize(''); setFilterYear(''); setFilterCountry(''); setFilterLabel('');
         setAvailableFilters({ years: [], countries: [], formats: [] });
         doSearch(1, { format: '', size: '', year: '', country: '' });
       };
@@ -877,7 +947,9 @@
       const handleFilterChange = (setter, key) => (e) => {
         const val = e.target.value;
         setter(val);
-        const filters = { format: filterFormat, size: filterSize, year: filterYear, country: filterCountry };
+        // For catno searches, filters are applied client-side (no re-fetch)
+        if (searchType === 'catno') return;
+        const filters = { format: filterFormat, size: filterSize, year: filterYear, country: filterCountry, label: filterLabel };
         filters[key] = val;
         doSearch(1, filters);
       };
@@ -897,24 +969,32 @@
       const collectionMap = {};
       collectionRaw.forEach(item => { if (!collectionMap[item.basic_information.id]) collectionMap[item.basic_information.id] = item; });
 
+      // Client-side filtering for catno searches (already have full dataset)
+      const filtered = (searchType === 'catno') ? apiResults.filter(r => {
+        if (filterFormat && !(r.format || []).some(f => f === filterFormat)) return false;
+        if (filterSize && !(r.format || []).some(f => f.includes(filterSize))) return false;
+        if (filterYear && r.year !== filterYear) return false;
+        if (filterCountry && r.country !== filterCountry) return false;
+        if (filterLabel && !(r.label || []).some(l => l === filterLabel)) return false;
+        return true;
+      }) : apiResults;
+
       // Split: local matches shown on top, API results without owned duplicates below
-      const apiIds = new Set(apiResults.map(r => r.id));
+      const apiIds = new Set(filtered.map(r => r.id));
       const uniqueLocal = localResults.filter(item => !apiIds.has(item.basic_information.id));
-      const apiNotOwned = apiResults.filter(r => !collectionIds.has(r.id));
-      const apiOwned = apiResults.filter(r => collectionIds.has(r.id));
-      // Merge all owned: local + API-owned (deduplicated)
-      const allOwnedLocal = [...uniqueLocal];
-      // API-owned shown as collection cards too
+      const apiNotOwned = filtered.filter(r => !collectionIds.has(r.id));
+      const apiOwned = filtered.filter(r => collectionIds.has(r.id));
       const allOwnedApi = apiOwned;
 
       const yearOptions = availableFilters.years;
       const countryOptions = availableFilters.countries;
+      const labelOptions = availableFilters.labels;
       const formatOptions = availableFilters.formats.length > 0
         ? availableFilters.formats.filter(f => !['12"','7"','10"','LP'].includes(f))
         : ['Vinyl','CD','Cassette','DVD','Box Set'];
 
       const totalOwned = uniqueLocal.length + apiOwned.length;
-      const totalResults = apiResults.length + uniqueLocal.length;
+      const totalResults = filtered.length + uniqueLocal.length;
 
       return (
         <div>
@@ -1015,6 +1095,12 @@
                           <option value="">Country...</option>
                           {countryOptions.map(c => <option key={c} value={c}>{c}</option>)}
                         </select>
+                        {labelOptions.length > 0 && (
+                          <select value={filterLabel} onChange={handleFilterChange(setFilterLabel, 'label')} className={filterLabel?'filter-active':''}>
+                            <option value="">Label...</option>
+                            {labelOptions.map(l => <option key={l} value={l}>{l}</option>)}
+                          </select>
+                        )}
                       </div>
                     )}
 
@@ -1025,9 +1111,9 @@
                       <>
                         {totalResults > 0 && (
                           <div className="hit-count">
-                            {pagination?.items || totalResults} results
+                            {totalResults} results
                             {totalOwned > 0 && ` · ${totalOwned} owned`}
-                            {pagination?.pages > 1 && ` · page ${page}/${pagination.pages}`}
+                            {pagination?.pages > 1 && (searchType !== 'catno' && searchType !== 'barcode') && ` · page ${page}/${pagination.pages}`}
                           </div>
                         )}
 
@@ -1066,7 +1152,7 @@
 
                         {totalResults === 0 && !error && <div className="empty-state"><p>No results</p></div>}
 
-                        {pagination?.pages > 1 && (
+                        {pagination?.pages > 1 && (searchType !== 'catno' && searchType !== 'barcode') && (
                           <div className="pagination">
                             <button onClick={()=>doSearch(page-1)} disabled={page<=1}>← Previous</button>
                             <button onClick={()=>doSearch(page+1)} disabled={page>=pagination.pages}>Next →</button>
