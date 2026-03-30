@@ -505,7 +505,11 @@
           onPrefsUpdate?.({ lastFolder: folderId, lastMedia: mediaCond });
           setAdded(true);
           setShowForm(false);
-          onAdded?.(r.id);
+          const notesList = [];
+          if (mediaCond && mediaField) notesList.push({ field_id: mediaField.id, value: mediaCond });
+          if (sleeveCond && sleeveField) notesList.push({ field_id: sleeveField.id, value: sleeveCond });
+          if (notes.trim() && notesField) notesList.push({ field_id: notesField.id, value: notes.trim() });
+          onAdded?.(r, instanceId, folderId, notesList);
         } catch (e) { alert("Could not add: " + e.message); }
         setAdding(false);
       };
@@ -515,7 +519,7 @@
         try {
           await addToWantlist(username, token, r.id);
           setAddedWant(true);
-          onWanted?.(r.id);
+          onWanted?.(r);
         } catch (e) { alert("Could not add to wantlist: " + e.message); }
         setAddingWant(false);
       };
@@ -989,15 +993,58 @@
         doSearch(1, filters);
       };
 
-      const onAdded = (id) => setCollectionIds(prev => new Set([...prev, id]));
+      const splitTitle = (t) => {
+        for (const sep of [' - ', ' \u2014 ']) {
+          const i = t.indexOf(sep);
+          if (i !== -1) return { artist: t.slice(0, i), title: t.slice(i + sep.length) };
+        }
+        return { artist: '', title: t };
+      };
+
+      const onAdded = (r, instanceId, folderId, notesList) => {
+        setCollectionIds(prev => new Set([...prev, r.id]));
+        const { artist, title } = splitTitle(r.title);
+        const newItem = {
+          instance_id: instanceId,
+          folder_id: Number(folderId),
+          id: r.id,
+          notes: notesList || [],
+          basic_information: {
+            id: r.id,
+            title: title,
+            artists: artist ? [{ name: artist }] : [],
+            cover_image: r.cover_image || '',
+            formats: (r.format || []).map(f => ({ name: f, descriptions: [] })),
+            labels: (r.label || []).map(l => ({ name: l, catno: r.catno || '' })),
+            year: r.year ? Number(r.year) : 0,
+          }
+        };
+        setCollectionRaw(prev => [...prev, newItem]);
+      };
       const onRemoved = (id, instanceId) => {
         setCollectionIds(prev => { const s = new Set(prev); s.delete(id); return s; });
         setCollectionRaw(prev => prev.filter(item => item.instance_id !== instanceId));
       };
-      const onWanted = (id) => setWantlistIds(prev => new Set([...prev, id]));
+      const onWanted = (r) => {
+        setWantlistIds(prev => new Set([...prev, r.id]));
+        const { artist, title } = splitTitle(r.title);
+        const newWant = {
+          id: r.id,
+          basic_information: {
+            id: r.id,
+            title: title,
+            artists: artist ? [{ name: artist }] : [],
+            cover_image: r.cover_image || '',
+            formats: (r.format || []).map(f => ({ name: f, descriptions: [] })),
+            labels: (r.label || []).map(l => ({ name: l, catno: r.catno || '' })),
+            year: r.year ? Number(r.year) : 0,
+          }
+        };
+        setWantlistRaw(prev => [...prev, newWant]);
+      };
       const onUnwanted = (id) => {
         setWantlistIds(prev => { const s = new Set(prev); s.delete(id); return s; });
-        setWantlistRaw(prev => prev.filter(w => w.id !== id));
+        setWantlistRaw(prev => prev.filter(w => w.basic_information?.id !== id && w.id !== id));
       };
 
       // Lookup: release id → collection instance (for removal)
