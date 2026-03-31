@@ -247,7 +247,7 @@
   <div id="root"></div>
   <div class="app-footer">&copy; 2026 <a href="mailto:rickard@engberg.io">rickard@engberg.io</a></div>
   <script type="text/babel">
-    const { useState, useEffect } = React;
+    const { useState, useEffect, useRef } = React;
 
     const API = "https://api.discogs.com";
     const CONDITIONS = [
@@ -614,10 +614,11 @@
               <div className="result-header">
                 <div style={{minWidth:0}}>
                   <div className="result-title result-title-wrap">{(() => {
-                    const sep = r.title.indexOf(' - ');
-                    if (sep === -1 || !onSearchText) return r.title;
-                    const artist = r.title.slice(0, sep);
-                    const title = r.title.slice(sep + 3);
+                    const t = r.title || '';
+                    const sep = t.indexOf(' - ');
+                    if (sep === -1 || !onSearchText) return t;
+                    const artist = t.slice(0, sep);
+                    const title = t.slice(sep + 3);
                     return <><span className="clickable-text" onClick={()=>onSearchText(artist)}>{artist}</span>{' - '}<span className="clickable-text" onClick={()=>onSearchText(title)}>{title}</span></>;
                   })()}</div>
                   {r.catno && r.catno !== 'none' && <div className="result-catno">Cat# {r.catno}</div>}
@@ -832,6 +833,7 @@
 
       const [query, setQuery] = useState('');
       const [searchType, setSearchType] = useState('catno');
+      const [exactCatno, setExactCatno] = useState(false);
 
       const [filterFormat, setFilterFormat] = useState('');
       const [filterSize, setFilterSize] = useState('');
@@ -849,6 +851,7 @@
       const [pagination, setPagination] = useState(null);
       const [page, setPage] = useState(1);
       const [availableFilters, setAvailableFilters] = useState({ years: [], countries: [], formats: [], labels: [] });
+      const searchGen = useRef(0);
 
       // Collection/Wantlist filters
       const [collFilter, setCollFilter] = useState({ format: '', year: '', label: '', folder: '' });
@@ -912,6 +915,11 @@
         setWantlistIds(new Set()); setWantlistRaw([]);
         setFolders([]); setFields([]); setToken(''); setUsername('');
         setCacheInfo(null); clearActiveSession(); setSettingsOpen(true);
+        // Reset search state to prevent stale data on reconnect
+        setApiResults([]); setLocalResults([]); setHasSearched(false);
+        setSearching(false); setError(''); setPagination(null); setPage(1);
+        setAvailableFilters({ years: [], countries: [], formats: [], labels: [] });
+        searchGen.current++;
       };
 
       const handleDeleteAccount = () => {
@@ -938,6 +946,7 @@
         const q = overrideQuery !== undefined ? overrideQuery : query;
         const st = overrideType !== undefined ? overrideType : searchType;
         if (!q.trim() || !token) return;
+        const gen = ++searchGen.current;
         setSearching(true); setError(''); setHasSearched(true);
 
         // 1. Local search (instant)
@@ -960,6 +969,7 @@
           if (fc) params.country = fc;
 
           const d = await dGet('/database/search', token, params);
+          if (gen !== searchGen.current) return; // stale search, discard
           let res = d.results || [];
 
           // Client-side size filter: keep matches + items without any size specified
@@ -995,6 +1005,7 @@
             );
             allVersions = versionResults.flat();
           }
+          if (gen !== searchGen.current) return; // stale after version expansion
 
           // Convert versions to ResultCard-compatible shape, keyed by release id
           const searchById = {};
@@ -1038,8 +1049,11 @@
           if (p === 1 && !ff && !fs && !fy && !fc) {
             setAvailableFilters(extractFilterOptions(finalResults));
           }
-        } catch (e) { setError(e.message); setApiResults([]); } finally {
-          setSearching(false);
+        } catch (e) {
+          if (gen !== searchGen.current) return; // stale search errored, ignore
+          setError(e.message); setApiResults([]);
+        } finally {
+          if (gen === searchGen.current) setSearching(false);
         }
       };
 
@@ -1127,9 +1141,13 @@
       const collectionMap = {};
       collectionRaw.forEach(item => { if (!collectionMap[item.basic_information.id]) collectionMap[item.basic_information.id] = item; });
 
+      // Normalize catno for exact matching: strip spaces and hyphens, lowercase
+      const normCatno = (s) => (s || '').replace(/[\s\-]/g, '').toLowerCase();
+
       // Client-side filtering for catno searches (already have full dataset)
       const sizes = ['12"', '7"', '10"'];
       const filtered = (searchType === 'catno') ? apiResults.filter(r => {
+        if (exactCatno && normCatno(r.catno) !== normCatno(query)) return false;
         if (filterFormat && !(r.format || []).some(f => f === filterFormat)) return false;
         if (filterSize) {
           const fmts = r.format || [];
@@ -1144,17 +1162,30 @@
 
       // Split: local matches shown on top, API results without owned duplicates below
       const apiIds = new Set(filtered.map(r => r.id));
-      const uniqueLocal = localResults.filter(item => !apiIds.has(item.basic_information.id));
+      const uniqueLocal = localResults.filter(item => {
+        if (apiIds.has(item.basic_information.id)) return false;
+        if (exactCatno && searchType === 'catno') {
+          const needle = normCatno(query);
+          if (!(item.basic_information.labels || []).some(l => normCatno(l.catno) === needle)) return false;
+        }
+        return true;
+      });
       const apiNotOwned = filtered.filter(r => !collectionIds.has(r.id));
       const apiOwned = filtered.filter(r => collectionIds.has(r.id));
       const allOwnedApi = apiOwned;
 
-      const yearOptions = availableFilters.years;
-      const countryOptions = availableFilters.countries;
-      const labelOptions = availableFilters.labels;
-      const formatOptions = availableFilters.formats.length > 0
-        ? availableFilters.formats.filter(f => !['12"','7"','10"','LP'].includes(f))
+      // For catno searches, derive filter options from the visible results so
+      // dropdowns only show values that exist after exact-match / other filtering.
+      // Always include the currently selected value so it remains visible for deselection.
+      const visibleFilters = (searchType === 'catno') ? extractFilterOptions(filtered) : availableFilters;
+      const ensureSelected = (opts, selected) => selected && !opts.includes(selected) ? [...opts, selected] : opts;
+      const yearOptions = ensureSelected(visibleFilters.years, filterYear);
+      const countryOptions = ensureSelected(visibleFilters.countries, filterCountry);
+      const labelOptions = ensureSelected(visibleFilters.labels, filterLabel);
+      const rawFormats = visibleFilters.formats.length > 0
+        ? visibleFilters.formats.filter(f => !['12"','7"','10"','LP'].includes(f))
         : ['Vinyl','CD','Cassette','DVD','Box Set'];
+      const formatOptions = ensureSelected(rawFormats, filterFormat);
 
       const totalOwned = uniqueLocal.length + apiOwned.length;
       const totalResults = filtered.length + uniqueLocal.length;
@@ -1251,6 +1282,13 @@
                         {searching ? <><span className="spinner"></span></> : 'Search'}
                       </button>
                     </form>
+
+                    {searchType === 'catno' && (
+                      <label style={{display:'flex',alignItems:'center',gap:6,fontSize:13,color:'#555',marginTop:6,cursor:'pointer'}}>
+                        <input type="checkbox" checked={exactCatno} onChange={e=>setExactCatno(e.target.checked)} />
+                        Exact matches only
+                      </label>
+                    )}
 
                     {/* Filters — shown after search has results */}
                     {hasSearched && apiResults.length > 0 && (
