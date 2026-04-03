@@ -544,7 +544,7 @@
     }
 
     // ==================== ResultCard ====================
-    function ResultCard({ r, owned, wanted, hideOwned, collectionInstance, token, username, folders, fields, defaultFolder, defaultMedia, onAdded, onRemoved, onWanted, onUnwanted, onPrefsUpdate, onSearchText, onClose }) {
+    function ResultCard({ r, owned, wanted, hideOwned, collectionInstance, token, username, folders, fields, defaultFolder, defaultMedia, onAdded, onRemoved, onWanted, onUnwanted, onPrefsUpdate, onSearchText, onSearchCatno, onClose }) {
       const [showForm, setShowForm] = useState(false);
       const [adding, setAdding] = useState(false);
       const [added, setAdded] = useState(false);
@@ -636,7 +636,7 @@
                     const title = t.slice(sep + 3);
                     return <><span className="clickable-text" onClick={()=>onSearchText(artist)}>{artist}</span>{' - '}<span className="clickable-text" onClick={()=>onSearchText(title)}>{title}</span></>;
                   })()}</div>
-                  {r.catno && r.catno !== 'none' && <div className="result-catno">Cat# {r.catno}</div>}
+                  {r.catno && r.catno !== 'none' && <div className="result-catno">Cat# {onSearchCatno ? <span className="clickable-text" onClick={() => onSearchCatno(r.catno)}>{r.catno}</span> : r.catno}</div>}
                   {r.label?.length > 0 && <div className="result-label">{r.label.filter(l=>l!=='Not On Label').join(', ')}</div>}
                 </div>
                 <div style={{display:'flex',gap:4,flexShrink:0}}>
@@ -1089,6 +1089,15 @@
         doSearch(1, { format: '', size: '', year: '', country: '' }, text, 'query');
       };
 
+      const handleSearchCatno = (catno) => {
+        setQuery(catno);
+        setSearchType('catno');
+        setFilterFormat(''); setFilterSize(''); setFilterYear(''); setFilterCountry(''); setFilterLabel('');
+        setAvailableFilters({ years: [], countries: [], formats: [], labels: [] });
+        setActiveView('search');
+        doSearch(1, { format: '', size: '', year: '', country: '' }, catno, 'catno');
+      };
+
       const handleSubmit = (e) => {
         e.preventDefault();
         setFilterFormat(''); setFilterSize(''); setFilterYear(''); setFilterCountry(''); setFilterLabel('');
@@ -1436,7 +1445,7 @@
                                           collectionInstance={collectionMap[t.release.id]} token={token} username={username}
                                           folders={folders} fields={fields} defaultFolder={lastFolder} defaultMedia={lastMedia}
                                           onAdded={onAdded} onRemoved={onRemoved} onWanted={onWanted} onUnwanted={onUnwanted}
-                                          onPrefsUpdate={handlePrefsUpdate} onSearchText={handleSearchText}
+                                          onPrefsUpdate={handlePrefsUpdate} onSearchText={handleSearchText} onSearchCatno={handleSearchCatno}
                                           onClose={() => setExpandedThumbId(null)} />
                                       </div>
                                     )}
@@ -1466,7 +1475,7 @@
                             {allOwnedApi.map(r => (
                               <ResultCard key={r.id} r={r} owned={true} wanted={wantlistIds.has(r.id)} collectionInstance={collectionMap[r.id]} token={token} username={username}
                                 folders={folders} fields={fields} defaultFolder={lastFolder} defaultMedia={lastMedia}
-                                onAdded={onAdded} onRemoved={onRemoved} onWanted={onWanted} onUnwanted={onUnwanted} onPrefsUpdate={handlePrefsUpdate} onSearchText={handleSearchText} />
+                                onAdded={onAdded} onRemoved={onRemoved} onWanted={onWanted} onUnwanted={onUnwanted} onPrefsUpdate={handlePrefsUpdate} onSearchText={handleSearchText} onSearchCatno={handleSearchCatno} />
                             ))}
                           </>
                         )}
@@ -1483,7 +1492,7 @@
                             {apiNotOwned.map(r => (
                               <ResultCard key={r.id} r={r} owned={false} wanted={wantlistIds.has(r.id)} token={token} username={username}
                                 folders={folders} fields={fields} defaultFolder={lastFolder} defaultMedia={lastMedia}
-                                onAdded={onAdded} onRemoved={onRemoved} onWanted={onWanted} onUnwanted={onUnwanted} onPrefsUpdate={handlePrefsUpdate} onSearchText={handleSearchText} />
+                                onAdded={onAdded} onRemoved={onRemoved} onWanted={onWanted} onUnwanted={onUnwanted} onPrefsUpdate={handlePrefsUpdate} onSearchText={handleSearchText} onSearchCatno={handleSearchCatno} />
                             ))}
                           </>
                         )}
@@ -1556,7 +1565,7 @@
                         return (
                           <ResultCard key={item.instance_id} r={r} owned={true} hideOwned={true} collectionInstance={item} wanted={wantlistIds.has(r.id)} token={token} username={username}
                             folders={folders} fields={fields} defaultFolder={lastFolder} defaultMedia={lastMedia}
-                            onAdded={onAdded} onRemoved={onRemoved} onWanted={onWanted} onUnwanted={onUnwanted} onPrefsUpdate={handlePrefsUpdate} onSearchText={handleSearchText} />
+                            onAdded={onAdded} onRemoved={onRemoved} onWanted={onWanted} onUnwanted={onUnwanted} onPrefsUpdate={handlePrefsUpdate} onSearchText={handleSearchText} onSearchCatno={handleSearchCatno} />
                         );
                       })}
                       {collectionRaw.length === 0 && (
@@ -1618,7 +1627,7 @@
                         return (
                           <ResultCard key={r.id} r={r} owned={collectionIds.has(r.id)} wanted={true} collectionInstance={collectionMap[r.id]} token={token} username={username}
                             folders={folders} fields={fields} defaultFolder={lastFolder} defaultMedia={lastMedia}
-                            onAdded={onAdded} onRemoved={onRemoved} onWanted={onWanted} onUnwanted={onUnwanted} onPrefsUpdate={handlePrefsUpdate} onSearchText={handleSearchText} />
+                            onAdded={onAdded} onRemoved={onRemoved} onWanted={onWanted} onUnwanted={onUnwanted} onPrefsUpdate={handlePrefsUpdate} onSearchText={handleSearchText} onSearchCatno={handleSearchCatno} />
                         );
                       })}
                       {wantlistRaw.length === 0 && (
