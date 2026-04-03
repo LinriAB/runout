@@ -241,6 +241,20 @@
     .app-footer a { color: #999; text-decoration: none; }
 
     .coll-meta { font-size: 11px; color: #aaa; margin-top: 4px; }
+
+    /* Thumbnail grid */
+    .thumb-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 4px; }
+    .thumb-grid-item { width: 100%; aspect-ratio: 1; border-radius: 8px; object-fit: cover; cursor: pointer; border: 2px solid transparent; transition: border-color 0.15s; }
+    .thumb-grid-item:hover { border-color: #6366f1; }
+    .thumb-grid-item.active { border-color: #4f46e5; box-shadow: 0 0 0 2px rgba(99,102,241,0.3); }
+    .thumb-grid-expanded { grid-column: 1 / -1; position: relative; }
+    .result-close {
+      position: absolute; top: 10px; right: 10px; z-index: 10;
+      width: 28px; height: 28px; border-radius: 50%; border: none;
+      background: rgba(0,0,0,0.5); color: #fff; font-size: 16px; line-height: 1;
+      cursor: pointer; display: flex; align-items: center; justify-content: center;
+    }
+    .result-close:hover { background: rgba(0,0,0,0.7); }
   </style>
 </head>
 <body>
@@ -530,7 +544,7 @@
     }
 
     // ==================== ResultCard ====================
-    function ResultCard({ r, owned, wanted, hideOwned, collectionInstance, token, username, folders, fields, defaultFolder, defaultMedia, onAdded, onRemoved, onWanted, onUnwanted, onPrefsUpdate, onSearchText }) {
+    function ResultCard({ r, owned, wanted, hideOwned, collectionInstance, token, username, folders, fields, defaultFolder, defaultMedia, onAdded, onRemoved, onWanted, onUnwanted, onPrefsUpdate, onSearchText, onClose }) {
       const [showForm, setShowForm] = useState(false);
       const [adding, setAdding] = useState(false);
       const [added, setAdded] = useState(false);
@@ -607,7 +621,8 @@
       };
 
       return (
-        <div className={`card result-card ${isOwned && !hideOwned ? 'owned' : ''}`}>
+        <div className={`card result-card ${isOwned && !hideOwned ? 'owned' : ''}`} style={onClose ? {position:'relative'} : undefined}>
+          {onClose && <button className="result-close" onClick={onClose} title="Close">×</button>}
           <div className="result-top">
             {r.cover_image && <img src={r.cover_image} className="result-img" alt="" onError={e => e.target.style.display='none'} />}
             <div className="result-info">
@@ -852,6 +867,12 @@
       const [page, setPage] = useState(1);
       const [availableFilters, setAvailableFilters] = useState({ years: [], countries: [], formats: [], labels: [] });
       const searchGen = useRef(0);
+      const [showAllImages, setShowAllImages] = useState(false);
+      const [expandedThumbId, setExpandedThumbId] = useState(null);
+      const [releaseImages, setReleaseImages] = useState({});
+      const [imagesLoading, setImagesLoading] = useState(false);
+      const [imagesProgress, setImagesProgress] = useState('');
+      const imagesAbort = useRef(false);
 
       // Collection/Wantlist filters
       const [collFilter, setCollFilter] = useState({ format: '', year: '', label: '', folder: '' });
@@ -948,6 +969,8 @@
         if (!q.trim() || !token) return;
         const gen = ++searchGen.current;
         setSearching(true); setError(''); setHasSearched(true);
+        setExpandedThumbId(null); setReleaseImages({}); setShowAllImages(false);
+        imagesAbort.current = true;
 
         // 1. Local search (instant)
         const local = searchLocal(collectionRaw, q, st);
@@ -1332,6 +1355,105 @@
                             {pagination?.pages > 1 && (searchType !== 'catno' && searchType !== 'barcode') && ` · page ${page}/${pagination.pages}`}
                           </div>
                         )}
+
+                        {totalResults > 0 && (
+                          <button className="gallery-toggle" style={{marginBottom:10}} onClick={() => {
+                            const next = !showAllImages;
+                            setShowAllImages(next);
+                            setExpandedThumbId(null);
+                          }}>
+                            {showAllImages ? '▾ Hide all images' : '▸ Show all images'}
+                          </button>
+                        )}
+
+                        {showAllImages && totalResults > 0 && (() => {
+                          const allReleases = [
+                            ...uniqueLocal.map(item => ({ ...itemToResult(item) })),
+                            ...filtered
+                          ];
+                          // Determine how many releases have been fetched
+                          const fetchedCount = allReleases.filter(r => releaseImages[r.id] !== undefined).length;
+                          // Load next batch of unfetched releases
+                          const BATCH = 6;
+                          const loadNextBatch = () => {
+                            if (imagesLoading) return;
+                            const unfetched = allReleases.filter(r => releaseImages[r.id] === undefined);
+                            if (unfetched.length === 0) return;
+                            const batch = unfetched.slice(0, BATCH);
+                            imagesAbort.current = false;
+                            setImagesLoading(true);
+                            setImagesProgress(`${fetchedCount}/${allReleases.length}`);
+                            (async () => {
+                              let loaded = fetchedCount;
+                              for (const r of batch) {
+                                if (imagesAbort.current) break;
+                                try {
+                                  const d = await dGet(`/releases/${r.id}`, token);
+                                  const imgs = (d.images || []).map(img => ({ uri150: img.uri150, uri: img.uri, type: img.type }));
+                                  setReleaseImages(prev => ({ ...prev, [r.id]: imgs }));
+                                } catch(e) {
+                                  setReleaseImages(prev => ({ ...prev, [r.id]: [] }));
+                                }
+                                loaded++;
+                                setImagesProgress(`${loaded}/${allReleases.length}`);
+                                if (loaded < fetchedCount + batch.length && !imagesAbort.current) await new Promise(res => setTimeout(res, 1100));
+                              }
+                              setImagesLoading(false);
+                            })();
+                          };
+                          // Auto-load first batch
+                          if (fetchedCount === 0 && !imagesLoading) setTimeout(loadNextBatch, 0);
+                          // Build flat list from fetched releases only
+                          const thumbList = [];
+                          allReleases.forEach(r => {
+                            const imgs = releaseImages[r.id];
+                            if (imgs && imgs.length > 0) {
+                              imgs.forEach((img, i) => thumbList.push({ img, release: r, key: `${r.id}_${i}` }));
+                            }
+                          });
+                          const hasMore = fetchedCount < allReleases.length;
+                          return (
+                            <div className="card" style={{padding:14,marginBottom:12}}>
+                              <div style={{fontSize:13,fontWeight:700,color:'#555',marginBottom:10}}>
+                                All images {imagesLoading
+                                  ? <span style={{fontWeight:400,color:'#999'}}>— loading {imagesProgress}...</span>
+                                  : `(${thumbList.length})`}
+                              </div>
+                              <div className="thumb-grid">
+                                {thumbList.map(t => (
+                                  <React.Fragment key={t.key}>
+                                    <img
+                                      src={t.img.uri150}
+                                      className={`thumb-grid-item ${expandedThumbId === t.key ? 'active' : ''}`}
+                                      alt={t.img.type || ''}
+                                      title={`${t.release.title} — ${t.img.type || 'image'}`}
+                                      onClick={() => setExpandedThumbId(expandedThumbId === t.key ? null : t.key)}
+                                      onError={e => e.target.style.display='none'}
+                                    />
+                                    {expandedThumbId === t.key && (
+                                      <div className="thumb-grid-expanded">
+                                        <ResultCard r={t.release} owned={collectionIds.has(t.release.id)} wanted={wantlistIds.has(t.release.id)}
+                                          collectionInstance={collectionMap[t.release.id]} token={token} username={username}
+                                          folders={folders} fields={fields} defaultFolder={lastFolder} defaultMedia={lastMedia}
+                                          onAdded={onAdded} onRemoved={onRemoved} onWanted={onWanted} onUnwanted={onUnwanted}
+                                          onPrefsUpdate={handlePrefsUpdate} onSearchText={handleSearchText}
+                                          onClose={() => setExpandedThumbId(null)} />
+                                      </div>
+                                    )}
+                                  </React.Fragment>
+                                ))}
+                              </div>
+                              {imagesLoading && (
+                                <div style={{textAlign:'center',padding:'12px 0'}}><div className="spinner" style={{width:20,height:20}}></div></div>
+                              )}
+                              {!imagesLoading && hasMore && (
+                                <button className="gallery-toggle" style={{textAlign:'center',width:'100%',padding:'10px 0'}} onClick={loadNextBatch}>
+                                  Load more images ({allReleases.length - fetchedCount} releases remaining)
+                                </button>
+                              )}
+                            </div>
+                          );
+                        })()}
 
                         {/* Owned: local matches + API-owned, shown at top */}
                         {totalOwned > 0 && (
