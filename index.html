@@ -6,9 +6,31 @@
   <meta name="apple-mobile-web-app-capable" content="yes" />
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
   <meta name="theme-color" content="#4f46e5" />
+  <meta name="description" content="Search Discogs fast. Find vinyl records by catalog number, barcode, or text. See what you own, add releases on the spot. Free PWA for record collectors and crate diggers." />
+  <meta name="keywords" content="Discogs, vinyl, record collection, catalog number search, barcode search, crate digging, record store, PWA" />
+  <meta name="author" content="Linri" />
+  <link rel="canonical" href="https://app.runout.io/" />
+
+  <!-- Open Graph -->
+  <meta property="og:type" content="website" />
+  <meta property="og:title" content="RunOut — Fast Discogs Search for Record Collectors" />
+  <meta property="og:description" content="Search Discogs by catalog number, barcode, or text. See your collection, add releases instantly. Free PWA — install on your phone." />
+  <meta property="og:url" content="https://app.runout.io/" />
+  <meta property="og:image" content="https://app.runout.io/icon-512.png" />
+  <meta property="og:site_name" content="RunOut" />
+  <meta property="og:locale" content="en_US" />
+
+  <!-- Twitter Card -->
+  <meta name="twitter:card" content="summary" />
+  <meta name="twitter:title" content="RunOut — Fast Discogs Search for Record Collectors" />
+  <meta name="twitter:description" content="Search Discogs by catalog number, barcode, or text. See your collection, add releases instantly." />
+  <meta name="twitter:image" content="https://app.runout.io/icon-512.png" />
+
   <link rel="manifest" href="manifest.json" />
   <link rel="apple-touch-icon" href="icon-192.png" />
-  <title>RunOut</title>
+  <link rel="icon" type="image/png" sizes="192x192" href="icon-192.png" />
+  <link rel="icon" type="image/png" sizes="512x512" href="icon-512.png" />
+  <title>RunOut — Fast Discogs Search for Record Collectors</title>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/react/18.2.0/umd/react.production.min.js"></script>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/react-dom/18.2.0/umd/react-dom.production.min.js"></script>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/babel-standalone/7.23.9/babel.min.js"></script>
@@ -256,9 +278,48 @@
     }
     .result-close:hover { background: rgba(0,0,0,0.7); }
   </style>
+  <!-- Structured Data -->
+  <script type="application/ld+json">
+  {
+    "@context": "https://schema.org",
+    "@type": "WebApplication",
+    "name": "RunOut",
+    "description": "Search Discogs fast. Find vinyl records by catalog number, barcode, or text. See what you own, add releases on the spot.",
+    "url": "https://app.runout.io/",
+    "applicationCategory": "UtilitiesApplication",
+    "operatingSystem": "Any",
+    "browserRequirements": "Requires a modern web browser with JavaScript enabled",
+    "offers": {
+      "@type": "Offer",
+      "price": "0",
+      "priceCurrency": "USD"
+    },
+    "author": {
+      "@type": "Organization",
+      "name": "Linri",
+      "url": "https://runout.io"
+    }
+  }
+  </script>
 </head>
 <body>
   <div id="root"></div>
+  <noscript>
+    <div style="max-width:500px;margin:40px auto;padding:20px;font-family:sans-serif;">
+      <h1>RunOut — Fast Discogs Search</h1>
+      <p>RunOut is a free tool for record collectors and crate diggers. Search your Discogs collection by catalog number, barcode, or text. See what you already own, and add new releases on the spot.</p>
+      <h2>Features</h2>
+      <ul>
+        <li>Search Discogs by catalog number, barcode, or free text</li>
+        <li>Instant local search against your cached collection</li>
+        <li>Owned releases highlighted at the top of results</li>
+        <li>Add releases with media condition, sleeve condition, and notes</li>
+        <li>Filter by format, size, year, and country</li>
+        <li>Works offline — installable as a PWA on your phone</li>
+      </ul>
+      <p>Please enable JavaScript to use RunOut.</p>
+    </div>
+  </noscript>
   <div class="app-footer">&copy; 2026 <a href="mailto:rickard@engberg.io">rickard@engberg.io</a></div>
   <script type="text/babel">
     const { useState, useEffect, useRef } = React;

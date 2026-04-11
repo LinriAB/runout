@@ -1,12 +1,14 @@
 {
-  "name": "RunOut",
+  "name": "RunOut — Fast Discogs Search",
   "short_name": "RunOut",
-  "description": "Search Discogs — fast & easy",
+  "description": "Search Discogs by catalog number, barcode, or text. See your collection, add releases instantly. Free PWA for record collectors.",
   "start_url": "./index.html",
   "display": "standalone",
   "background_color": "#f5f5f7",
   "theme_color": "#4f46e5",
   "orientation": "portrait",
+  "categories": ["utilities", "entertainment"],
+  "lang": "en",
   "icons": [
     { "src": "icon-192.png", "sizes": "192x192", "type": "image/png" },
     { "src": "icon-512.png", "sizes": "512x512", "type": "image/png" }
