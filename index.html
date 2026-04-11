@@ -544,7 +544,7 @@
     }
 
     // ==================== ResultCard ====================
-    function ResultCard({ r, owned, wanted, hideOwned, collectionInstance, token, username, folders, fields, defaultFolder, defaultMedia, onAdded, onRemoved, onWanted, onUnwanted, onPrefsUpdate, onSearchText, onSearchCatno, onClose }) {
+    function ResultCard({ r, owned, wanted, hideOwned, collectionInstance, token, username, folders, fields, defaultFolder, defaultMedia, onAdded, onRemoved, onWanted, onUnwanted, onPrefsUpdate, onSearchText, onSearchCatno, onClose, activeSizeFilter }) {
       const [showForm, setShowForm] = useState(false);
       const [adding, setAdding] = useState(false);
       const [added, setAdded] = useState(false);
@@ -562,7 +562,10 @@
       const [imgRendering, setImgRendering] = useState(false);
       const isOwned = (owned || added) && !removed;
       const isWanted = wanted || addedWant;
-      const formats = [...new Set(r.format || [])];
+      const allSizes = ['12"', '7"', '10"'];
+      const formats = [...new Set(r.format || [])].filter(f =>
+        !activeSizeFilter || !allSizes.some(s => f.includes(s)) || f.includes(activeSizeFilter)
+      );
 
       const mediaField = fields.find(f => f.name === 'Media Condition');
       const sleeveField = fields.find(f => f.name === 'Sleeve Condition');
@@ -1446,7 +1449,7 @@
                                           folders={folders} fields={fields} defaultFolder={lastFolder} defaultMedia={lastMedia}
                                           onAdded={onAdded} onRemoved={onRemoved} onWanted={onWanted} onUnwanted={onUnwanted}
                                           onPrefsUpdate={handlePrefsUpdate} onSearchText={handleSearchText} onSearchCatno={handleSearchCatno}
-                                          onClose={() => setExpandedThumbId(null)} />
+                                          onClose={() => setExpandedThumbId(null)} activeSizeFilter={filterSize} />
                                       </div>
                                     )}
                                   </React.Fragment>
@@ -1475,7 +1478,7 @@
                             {allOwnedApi.map(r => (
                               <ResultCard key={r.id} r={r} owned={true} wanted={wantlistIds.has(r.id)} collectionInstance={collectionMap[r.id]} token={token} username={username}
                                 folders={folders} fields={fields} defaultFolder={lastFolder} defaultMedia={lastMedia}
-                                onAdded={onAdded} onRemoved={onRemoved} onWanted={onWanted} onUnwanted={onUnwanted} onPrefsUpdate={handlePrefsUpdate} onSearchText={handleSearchText} onSearchCatno={handleSearchCatno} />
+                                onAdded={onAdded} onRemoved={onRemoved} onWanted={onWanted} onUnwanted={onUnwanted} onPrefsUpdate={handlePrefsUpdate} onSearchText={handleSearchText} onSearchCatno={handleSearchCatno} activeSizeFilter={filterSize} />
                             ))}
                           </>
                         )}
@@ -1492,7 +1495,7 @@
                             {apiNotOwned.map(r => (
                               <ResultCard key={r.id} r={r} owned={false} wanted={wantlistIds.has(r.id)} token={token} username={username}
                                 folders={folders} fields={fields} defaultFolder={lastFolder} defaultMedia={lastMedia}
-                                onAdded={onAdded} onRemoved={onRemoved} onWanted={onWanted} onUnwanted={onUnwanted} onPrefsUpdate={handlePrefsUpdate} onSearchText={handleSearchText} onSearchCatno={handleSearchCatno} />
+                                onAdded={onAdded} onRemoved={onRemoved} onWanted={onWanted} onUnwanted={onUnwanted} onPrefsUpdate={handlePrefsUpdate} onSearchText={handleSearchText} onSearchCatno={handleSearchCatno} activeSizeFilter={filterSize} />
                             ))}
                           </>
                         )}
