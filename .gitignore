@@ -18,6 +18,18 @@ package-lock.json
 dist/
 build/
 
+# Capacitor / Native
+native/node_modules/
+native/android/.gradle/
+native/android/app/build/
+native/android/build/
+native/android/.idea/
+native/android/local.properties
+native/ios/App/Pods/
+native/ios/App/build/
+native/ios/App/App.xcworkspace/xcuserdata/
+*.xcuserstate
+
 # Environment / secrets
 .env
 .env.local
