@@ -721,7 +721,7 @@
                     if (sep === -1 || !onSearchText) return t;
                     const artist = t.slice(0, sep);
                     const title = t.slice(sep + 3);
-                    return <><span className="clickable-text" onClick={()=>onSearchText(artist)}>{artist}</span>{' - '}<span className="clickable-text" onClick={()=>onSearchText(title)}>{title}</span></>;
+                    return <><span className="clickable-text" onClick={()=>onSearchText(artist)}>{artist}</span>{' - '}<span className="clickable-text" onClick={()=>onSearchText(`${artist} ${title}`)}>{title}</span></>;
                   })()}</div>
                   {r.catno && r.catno !== 'none' && <div className="result-catno">Cat# {onSearchCatno ? <span className="clickable-text" onClick={() => onSearchCatno(r.catno)}>{r.catno}</span> : r.catno}</div>}
                   {r.label?.length > 0 && <div className="result-label">{r.label.filter(l=>l!=='Not On Label').join(', ')}</div>}
