@@ -119,6 +119,14 @@
       font-size: 12px; font-weight: 600; color: #4f46e5; text-align: left;
     }
     .gallery { border-top: 1px solid #f0f0f0; margin-top: 10px; padding-top: 12px; }
+    .release-info { border-top: 1px solid #f0f0f0; margin-top: 10px; padding-top: 12px; font-size: 12px; color: #444; }
+    .release-info .info-section { margin-bottom: 12px; }
+    .release-info .info-section:last-child { margin-bottom: 0; }
+    .release-info .info-label { font-size: 10px; font-weight: 700; color: #888; text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 4px; }
+    .release-info .info-notes { white-space: pre-wrap; line-height: 1.5; color: #333; }
+    .release-info .info-identifiers { list-style: none; padding: 0; margin: 0; }
+    .release-info .info-identifiers li { padding: 2px 0; line-height: 1.5; word-break: break-word; }
+    .release-info .info-identifiers strong { color: #555; font-weight: 600; }
     .gallery-viewer { position: relative; width: 100%; aspect-ratio: 1; background: #f9f9f9; border-radius: 10px; overflow: hidden; display: flex; align-items: center; justify-content: center; }
     .gallery-viewer img { width: 100%; height: 100%; object-fit: contain; }
     .gallery-viewer .gallery-loading { position: absolute; }
@@ -618,10 +626,24 @@
       const [sleeveCond, setSleeveCond] = useState('');
       const [notes, setNotes] = useState('');
       const [showGallery, setShowGallery] = useState(false);
-      const [images, setImages] = useState(null);
+      const [releaseDetails, setReleaseDetails] = useState(null);
+      const [detailsLoading, setDetailsLoading] = useState(false);
       const [imgIdx, setImgIdx] = useState(0);
-      const [imgLoading, setImgLoading] = useState(false);
       const [imgRendering, setImgRendering] = useState(false);
+      const [showInfo, setShowInfo] = useState(false);
+      const images = releaseDetails?.images || null;
+      const imgLoading = detailsLoading && showGallery;
+
+      const fetchDetails = async () => {
+        if (releaseDetails || detailsLoading) return;
+        setDetailsLoading(true);
+        try {
+          const d = await dGet(`/releases/${r.id}`, token);
+          setReleaseDetails(d);
+          setImgIdx(0);
+        } catch (e) { setReleaseDetails({ images: [], notes: '', identifiers: [] }); }
+        setDetailsLoading(false);
+      };
       const isOwned = (owned || added) && !removed;
       const isWanted = wanted || addedWant;
       const allSizes = ['12"', '7"', '10"'];
@@ -743,18 +765,50 @@
             <a className="btn-discogs" href={`https://www.discogs.com${r.uri || '/release/'+r.id}`} target="_blank" rel="noopener">View on Discogs ↗</a>
           </div>
 
-          {token && <button className="gallery-toggle" onClick={async () => {
+          {token && <button className="gallery-toggle" onClick={() => {
             if (showGallery) { setShowGallery(false); return; }
             setShowGallery(true);
-            if (images) return;
-            setImgLoading(true);
-            try {
-              const d = await dGet(`/releases/${r.id}`, token);
-              setImages(d.images || []);
-              setImgIdx(0);
-            } catch (e) { setImages([]); }
-            setImgLoading(false);
+            fetchDetails();
           }}>{showGallery ? '▾ Hide images' : '▸ Images'}</button>}
+
+          {token && <button className="gallery-toggle" onClick={() => {
+            if (showInfo) { setShowInfo(false); return; }
+            setShowInfo(true);
+            fetchDetails();
+          }}>{showInfo ? '▾ Hide notes & identifiers' : '▸ Notes & identifiers'}</button>}
+
+          {showInfo && (
+            <div className="release-info">
+              {detailsLoading && !releaseDetails && <div className="empty-state"><div className="spinner" style={{width:20,height:20}}></div></div>}
+              {releaseDetails && (() => {
+                const notes = releaseDetails.notes;
+                const identifiers = releaseDetails.identifiers || [];
+                if (!notes && identifiers.length === 0) {
+                  return <div style={{fontSize:12,color:'#999',padding:'8px 0'}}>No notes or identifiers available</div>;
+                }
+                return <>
+                  {notes && (
+                    <div className="info-section">
+                      <div className="info-label">Notes</div>
+                      <div className="info-notes">{notes}</div>
+                    </div>
+                  )}
+                  {identifiers.length > 0 && (
+                    <div className="info-section">
+                      <div className="info-label">Barcodes & other identifiers</div>
+                      <ul className="info-identifiers">
+                        {identifiers.map((id, i) => (
+                          <li key={i}>
+                            <strong>{id.type}{id.description ? ` (${id.description})` : ''}:</strong> {id.value}
+                          </li>
+                        ))}
+                      </ul>
+                    </div>
+                  )}
+                </>;
+              })()}
+            </div>
+          )}
 
           {showGallery && (
             <div className="gallery">
