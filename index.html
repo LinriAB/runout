@@ -631,6 +631,9 @@
       const [imgIdx, setImgIdx] = useState(0);
       const [imgRendering, setImgRendering] = useState(false);
       const [showInfo, setShowInfo] = useState(false);
+      const [showMarket, setShowMarket] = useState(false);
+      const [marketData, setMarketData] = useState(null);
+      const [marketLoading, setMarketLoading] = useState(false);
       const images = releaseDetails?.images || null;
       const imgLoading = detailsLoading && showGallery;
 
@@ -643,6 +646,19 @@
           setImgIdx(0);
         } catch (e) { setReleaseDetails({ images: [], notes: '', identifiers: [] }); }
         setDetailsLoading(false);
+      };
+
+      const fetchMarket = async () => {
+        if (marketData || marketLoading) return;
+        setMarketLoading(true);
+        try {
+          const [stats, suggestions] = await Promise.all([
+            dGet(`/marketplace/stats/${r.id}`, token).catch(() => null),
+            dGet(`/marketplace/price_suggestions/${r.id}`, token).catch(() => null),
+          ]);
+          setMarketData({ stats, suggestions });
+        } catch (e) { setMarketData({ stats: null, suggestions: null }); }
+        setMarketLoading(false);
       };
       const isOwned = (owned || added) && !removed;
       const isWanted = wanted || addedWant;
@@ -801,6 +817,55 @@
                           <li key={i}>
                             <strong>{id.type}{id.description ? ` (${id.description})` : ''}:</strong> {id.value}
                           </li>
+                        ))}
+                      </ul>
+                    </div>
+                  )}
+                </>;
+              })()}
+            </div>
+          )}
+
+          {token && <button className="gallery-toggle" onClick={() => {
+            if (showMarket) { setShowMarket(false); return; }
+            setShowMarket(true);
+            fetchMarket();
+          }}>{showMarket ? '▾ Hide marketplace & prices' : '▸ Marketplace & prices'}</button>}
+
+          {showMarket && (
+            <div className="release-info">
+              {marketLoading && !marketData && <div className="empty-state"><div className="spinner" style={{width:20,height:20}}></div></div>}
+              {marketData && (() => {
+                const stats = marketData.stats;
+                const suggestions = marketData.suggestions;
+                const hasStats = stats && (stats.num_for_sale > 0 || stats.lowest_price);
+                const suggestionEntries = suggestions ? Object.entries(suggestions) : [];
+                const hasSuggestions = suggestionEntries.length > 0;
+                if (!hasStats && !hasSuggestions) {
+                  return <div style={{fontSize:12,color:'#999',padding:'8px 0'}}>No marketplace data available</div>;
+                }
+                const fmtPrice = (p) => p && p.value != null ? `${p.value.toFixed(2)} ${p.currency}` : '—';
+                const condOrder = ['Mint (M)','Near Mint (NM or M-)','Very Good Plus (VG+)','Very Good (VG)','Good Plus (G+)','Good (G)','Fair (F)','Poor (P)'];
+                const sortedSuggestions = suggestionEntries.sort((a,b) => {
+                  const ai = condOrder.indexOf(a[0]); const bi = condOrder.indexOf(b[0]);
+                  return (ai === -1 ? 999 : ai) - (bi === -1 ? 999 : bi);
+                });
+                return <>
+                  {hasStats && (
+                    <div className="info-section">
+                      <div className="info-label">Marketplace</div>
+                      <div className="info-notes">
+                        {stats.num_for_sale > 0 ? `${stats.num_for_sale} for sale` : 'None for sale'}
+                        {stats.lowest_price && ` · from ${fmtPrice(stats.lowest_price)}`}
+                      </div>
+                    </div>
+                  )}
+                  {hasSuggestions && (
+                    <div className="info-section">
+                      <div className="info-label">Suggested prices by condition</div>
+                      <ul className="info-identifiers">
+                        {sortedSuggestions.map(([cond, price]) => (
+                          <li key={cond}><strong>{cond}:</strong> {fmtPrice(price)}</li>
                         ))}
                       </ul>
                     </div>
