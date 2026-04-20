@@ -170,6 +170,39 @@
     .filters select { width: auto; flex: 1; min-width: 0; font-size: 12px; padding: 7px 10px; border-radius: 8px; }
     .filter-active { border-color: #4f46e5 !important; background: #f0f0ff !important; }
 
+    /* Multi-select filter */
+    .multiselect { position: relative; flex: 1; min-width: 0; }
+    .multiselect-btn {
+      width: 100%; border: 1.5px solid #ddd; border-radius: 8px; padding: 7px 10px;
+      font-size: 12px; background: white; cursor: pointer; text-align: left;
+      display: flex; justify-content: space-between; align-items: center; gap: 4px;
+      font-family: inherit; color: #1d1d1f;
+      overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+    }
+    .multiselect-btn .ms-label { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .multiselect-btn .ms-arrow { font-size: 10px; color: #999; flex-shrink: 0; }
+    .multiselect.filter-active .multiselect-btn { border-color: #4f46e5; background: #f0f0ff; }
+    .multiselect-popover {
+      position: absolute; top: calc(100% + 4px); left: 0; z-index: 50;
+      min-width: 100%; width: max-content; max-width: 260px;
+      background: white; border: 1.5px solid #e5e5ea; border-radius: 10px;
+      box-shadow: 0 4px 12px rgba(0,0,0,0.1); max-height: 260px; overflow-y: auto;
+      padding: 6px;
+    }
+    .multiselect-clear {
+      width: 100%; border: none; background: none; color: #4f46e5; font-size: 12px;
+      font-weight: 600; cursor: pointer; padding: 6px; text-align: left;
+      border-bottom: 1px solid #f0f0f0; margin-bottom: 4px; letter-spacing: 0; text-transform: none;
+    }
+    .multiselect-option {
+      display: flex; align-items: center; gap: 8px; padding: 6px 8px; font-size: 13px;
+      cursor: pointer; border-radius: 6px; text-transform: none; color: #1d1d1f;
+      font-weight: 400; letter-spacing: 0; margin: 0;
+    }
+    .multiselect-option:hover { background: #f5f5f7; }
+    .multiselect-option input { margin: 0; width: auto; flex-shrink: 0; }
+    .multiselect-empty { padding: 8px; font-size: 12px; color: #999; text-align: center; }
+
     /* Section divider */
     .section-label { font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.8px; padding: 10px 0 6px; display: flex; align-items: center; gap: 8px; }
     .section-label.owned { color: #16a34a; }
@@ -581,13 +614,13 @@
 
     function filterCollectionItem(item, filters) {
       const info = item.basic_information;
-      if (filters.format) {
+      if (filters.formats?.length) {
         const fmts = (info.formats || []).flatMap(f => [f.name, ...(f.descriptions || [])]);
-        if (!fmts.includes(filters.format)) return false;
+        if (!fmts.some(f => filters.formats.includes(f))) return false;
       }
-      if (filters.year && String(info.year) !== filters.year) return false;
-      if (filters.label && !(info.labels || []).some(l => l.name === filters.label)) return false;
-      if (filters.folder && String(item.folder_id) !== filters.folder) return false;
+      if (filters.years?.length && !filters.years.includes(String(info.year))) return false;
+      if (filters.labels?.length && !(info.labels || []).some(l => filters.labels.includes(l.name))) return false;
+      if (filters.folders?.length && !filters.folders.includes(String(item.folder_id))) return false;
       return true;
     }
 
@@ -619,8 +652,53 @@
       });
     }
 
+    // ==================== MultiSelect ====================
+    function MultiSelect({ options, selected, onChange, placeholder, renderOption }) {
+      const [open, setOpen] = useState(false);
+      const ref = useRef(null);
+      useEffect(() => {
+        if (!open) return;
+        const handler = (e) => { if (ref.current && !ref.current.contains(e.target)) setOpen(false); };
+        document.addEventListener('mousedown', handler);
+        document.addEventListener('touchstart', handler);
+        return () => {
+          document.removeEventListener('mousedown', handler);
+          document.removeEventListener('touchstart', handler);
+        };
+      }, [open]);
+      const toggle = (v) => {
+        onChange(selected.includes(v) ? selected.filter(x => x !== v) : [...selected, v]);
+      };
+      const active = selected.length > 0;
+      const baseLabel = placeholder.replace(/\.\.\.$/, '');
+      const display = (v) => renderOption ? renderOption(v) : v;
+      const label = !active ? placeholder : selected.length === 1 ? display(selected[0]) : `${baseLabel} (${selected.length})`;
+      return (
+        <div className={`multiselect ${active ? 'filter-active' : ''}`} ref={ref}>
+          <button type="button" className="multiselect-btn" onClick={() => setOpen(!open)}>
+            <span className="ms-label">{label}</span>
+            <span className="ms-arrow">▾</span>
+          </button>
+          {open && (
+            <div className="multiselect-popover">
+              {active && (
+                <button className="multiselect-clear" onClick={() => onChange([])}>Clear selection</button>
+              )}
+              {options.length === 0 && <div className="multiselect-empty">No options</div>}
+              {options.map(opt => (
+                <label key={opt} className="multiselect-option">
+                  <input type="checkbox" checked={selected.includes(opt)} onChange={() => toggle(opt)} />
+                  <span>{display(opt)}</span>
+                </label>
+              ))}
+            </div>
+          )}
+        </div>
+      );
+    }
+
     // ==================== ResultCard ====================
-    function ResultCard({ r, owned, wanted, hideOwned, collectionInstance, token, username, folders, fields, defaultFolder, defaultMedia, onAdded, onRemoved, onWanted, onUnwanted, onPrefsUpdate, onSearchText, onSearchCatno, onClose, activeSizeFilter }) {
+    function ResultCard({ r, owned, wanted, hideOwned, collectionInstance, token, username, folders, fields, defaultFolder, defaultMedia, onAdded, onRemoved, onWanted, onUnwanted, onPrefsUpdate, onSearchText, onSearchCatno, onClose, activeSizeFilters }) {
       const [showForm, setShowForm] = useState(false);
       const [adding, setAdding] = useState(false);
       const [added, setAdded] = useState(false);
@@ -670,7 +748,7 @@
       const isWanted = wanted || addedWant;
       const allSizes = ['12"', '7"', '10"'];
       const formats = [...new Set(r.format || [])].filter(f =>
-        !activeSizeFilter || !allSizes.some(s => f.includes(s)) || f.includes(activeSizeFilter)
+        !activeSizeFilters?.length || !allSizes.some(s => f.includes(s)) || activeSizeFilters.some(s => f.includes(s))
       );
 
       const mediaField = fields.find(f => f.name === 'Media Condition');
@@ -776,7 +854,7 @@
 
           <div className="result-actions">
             {!isOwned && token && username && !showForm && (
-              <button className="btn-add" onClick={() => { setShowGallery(false); setShowForm(true); }}>+ Add to collection</button>
+              <button className="btn-add" onClick={() => { setShowGallery(false); setShowForm(true); }}>+ Collection</button>
             )}
             {isOwned && hideOwned && collectionInstance && (
               <button className="btn-add" style={{flex:'none',background:'#dc2626'}} onClick={handleRemoveFromCollection}>Remove</button>
@@ -784,7 +862,7 @@
             {!isOwned && !isWanted && token && username && (
               <button className="btn-want" onClick={handleAddWant} disabled={addingWant}>{addingWant ? 'Adding...' : '♡ Want'}</button>
             )}
-            <a className="btn-discogs" href={`https://www.discogs.com${r.uri || '/release/'+r.id}`} target="_blank" rel="noopener">View on Discogs ↗</a>
+            <a className="btn-discogs" href={`https://www.discogs.com${r.uri || '/release/'+r.id}`} target="_blank" rel="noopener">Discogs ↗</a>
           </div>
 
           {token && <button className="gallery-toggle" onClick={() => {
@@ -792,6 +870,29 @@
             setShowGallery(true);
             fetchDetails();
           }}>{showGallery ? '▾ Hide images' : '▸ Images'}</button>}
+
+          {showGallery && (
+            <div className="gallery">
+              {imgLoading && <div className="empty-state"><div className="spinner" style={{width:20,height:20}}></div></div>}
+              {images && images.length === 0 && <div style={{fontSize:12,color:'#999',padding:'8px 0'}}>No images available</div>}
+              {images && images.length > 0 && (
+                <>
+                  <div className="gallery-viewer">
+                    {imgRendering && <div className="gallery-loading"><div className="spinner" style={{width:24,height:24}}></div></div>}
+                    <img src={images[imgIdx].uri} alt={images[imgIdx].type || ''} onLoad={()=>setImgRendering(false)} onError={()=>setImgRendering(false)} />
+                    {images.length > 1 && <>
+                      <button className="gallery-nav prev" onClick={()=>{ setImgRendering(true); setImgIdx(i => i > 0 ? i-1 : images.length-1); }}>‹</button>
+                      <button className="gallery-nav next" onClick={()=>{ setImgRendering(true); setImgIdx(i => i < images.length-1 ? i+1 : 0); }}>›</button>
+                    </>}
+                  </div>
+                  <div className="gallery-dots">
+                    {images.map((_,i) => <button key={i} className={`gallery-dot ${i===imgIdx ? 'active' : ''}`} onClick={()=>{ setImgRendering(true); setImgIdx(i); }} />)}
+                  </div>
+                  <div className="gallery-type">{images[imgIdx].type}{images.length > 1 && ` (${imgIdx+1}/${images.length})`}</div>
+                </>
+              )}
+            </div>
+          )}
 
           {token && <button className="gallery-toggle" onClick={() => {
             if (showInfo) { setShowInfo(false); return; }
@@ -878,29 +979,6 @@
                   )}
                 </>;
               })()}
-            </div>
-          )}
-
-          {showGallery && (
-            <div className="gallery">
-              {imgLoading && <div className="empty-state"><div className="spinner" style={{width:20,height:20}}></div></div>}
-              {images && images.length === 0 && <div style={{fontSize:12,color:'#999',padding:'8px 0'}}>No images available</div>}
-              {images && images.length > 0 && (
-                <>
-                  <div className="gallery-viewer">
-                    {imgRendering && <div className="gallery-loading"><div className="spinner" style={{width:24,height:24}}></div></div>}
-                    <img src={images[imgIdx].uri} alt={images[imgIdx].type || ''} onLoad={()=>setImgRendering(false)} onError={()=>setImgRendering(false)} />
-                    {images.length > 1 && <>
-                      <button className="gallery-nav prev" onClick={()=>{ setImgRendering(true); setImgIdx(i => i > 0 ? i-1 : images.length-1); }}>‹</button>
-                      <button className="gallery-nav next" onClick={()=>{ setImgRendering(true); setImgIdx(i => i < images.length-1 ? i+1 : 0); }}>›</button>
-                    </>}
-                  </div>
-                  <div className="gallery-dots">
-                    {images.map((_,i) => <button key={i} className={`gallery-dot ${i===imgIdx ? 'active' : ''}`} onClick={()=>{ setImgRendering(true); setImgIdx(i); }} />)}
-                  </div>
-                  <div className="gallery-type">{images[imgIdx].type}{images.length > 1 && ` (${imgIdx+1}/${images.length})`}</div>
-                </>
-              )}
             </div>
           )}
 
@@ -1040,11 +1118,11 @@
       const [searchType, setSearchType] = useState('catno');
       const [exactCatno, setExactCatno] = useState(false);
 
-      const [filterFormat, setFilterFormat] = useState('');
-      const [filterSize, setFilterSize] = useState('');
-      const [filterYear, setFilterYear] = useState('');
-      const [filterCountry, setFilterCountry] = useState('');
-      const [filterLabel, setFilterLabel] = useState('');
+      const [filterFormats, setFilterFormats] = useState([]);
+      const [filterSizes, setFilterSizes] = useState([]);
+      const [filterYears, setFilterYears] = useState([]);
+      const [filterCountries, setFilterCountries] = useState([]);
+      const [filterLabels, setFilterLabels] = useState([]);
 
       // API results from Discogs search
       const [apiResults, setApiResults] = useState([]);
@@ -1065,8 +1143,8 @@
       const imagesAbort = useRef(false);
 
       // Collection/Wantlist filters
-      const [collFilter, setCollFilter] = useState({ format: '', year: '', label: '', folder: '' });
-      const [wantFilter, setWantFilter] = useState({ format: '', year: '', label: '' });
+      const [collFilter, setCollFilter] = useState({ formats: [], years: [], labels: [], folders: [] });
+      const [wantFilter, setWantFilter] = useState({ formats: [], years: [], labels: [] });
 
       const [lastFolder, setLastFolder] = useState(prefs.lastFolder || '1');
       const [lastMedia, setLastMedia] = useState(prefs.lastMedia || '');
@@ -1179,26 +1257,28 @@
           else if (st === 'barcode') params.barcode = q.trim();
           else params.q = q.trim();
 
-          const ff = extraFilters.format !== undefined ? extraFilters.format : filterFormat;
-          const fs = extraFilters.size !== undefined ? extraFilters.size : filterSize;
-          const fy = extraFilters.year !== undefined ? extraFilters.year : filterYear;
-          const fc = extraFilters.country !== undefined ? extraFilters.country : filterCountry;
-          if (ff) params.format = ff;
-          if (fy) params.year = fy;
-          if (fc) params.country = fc;
+          const ff = extraFilters.formats !== undefined ? extraFilters.formats : filterFormats;
+          const fs = extraFilters.sizes !== undefined ? extraFilters.sizes : filterSizes;
+          const fy = extraFilters.years !== undefined ? extraFilters.years : filterYears;
+          const fc = extraFilters.countries !== undefined ? extraFilters.countries : filterCountries;
+          // API only accepts one value per filter; send only when exactly one selected.
+          // Multi-select falls back to client-side filtering below.
+          if (ff.length === 1) params.format = ff[0];
+          if (fy.length === 1) params.year = fy[0];
+          if (fc.length === 1) params.country = fc[0];
 
           const d = await dGet('/database/search', token, params);
           if (gen !== searchGen.current) return; // stale search, discard
           let res = d.results || [];
 
           // Client-side size filter: keep matches + items without any size specified
-          if (fs) {
+          if (fs.length > 0) {
             const sizes = ['12"', '7"', '10"'];
             res = res.filter(r => {
               const fmts = r.format || [];
               const hasAnySize = fmts.some(f => sizes.some(s => f.includes(s)));
               if (!hasAnySize) return true; // no size info → always show
-              return fmts.some(f => f.includes(fs)); // has size → must match
+              return fmts.some(f => fs.some(s => f.includes(s))); // has size → must match any selected
             });
           }
 
@@ -1265,7 +1345,7 @@
           setPagination(d.pagination || null);
           setPage(p);
 
-          if (p === 1 && !ff && !fs && !fy && !fc) {
+          if (p === 1 && ff.length === 0 && fs.length === 0 && fy.length === 0 && fc.length === 0) {
             setAvailableFilters(extractFilterOptions(finalResults));
           }
         } catch (e) {
@@ -1279,34 +1359,33 @@
       const handleSearchText = (text) => {
         setQuery(text);
         setSearchType('query');
-        setFilterFormat(''); setFilterSize(''); setFilterYear(''); setFilterCountry(''); setFilterLabel('');
+        setFilterFormats([]); setFilterSizes([]); setFilterYears([]); setFilterCountries([]); setFilterLabels([]);
         setAvailableFilters({ years: [], countries: [], formats: [], labels: [] });
         setActiveView('search');
-        doSearch(1, { format: '', size: '', year: '', country: '' }, text, 'query');
+        doSearch(1, { formats: [], sizes: [], years: [], countries: [] }, text, 'query');
       };
 
       const handleSearchCatno = (catno) => {
         setQuery(catno);
         setSearchType('catno');
-        setFilterFormat(''); setFilterSize(''); setFilterYear(''); setFilterCountry(''); setFilterLabel('');
+        setFilterFormats([]); setFilterSizes([]); setFilterYears([]); setFilterCountries([]); setFilterLabels([]);
         setAvailableFilters({ years: [], countries: [], formats: [], labels: [] });
         setActiveView('search');
-        doSearch(1, { format: '', size: '', year: '', country: '' }, catno, 'catno');
+        doSearch(1, { formats: [], sizes: [], years: [], countries: [] }, catno, 'catno');
       };
 
       const handleSubmit = (e) => {
         e.preventDefault();
-        setFilterFormat(''); setFilterSize(''); setFilterYear(''); setFilterCountry(''); setFilterLabel('');
+        setFilterFormats([]); setFilterSizes([]); setFilterYears([]); setFilterCountries([]); setFilterLabels([]);
         setAvailableFilters({ years: [], countries: [], formats: [], labels: [] });
-        doSearch(1, { format: '', size: '', year: '', country: '' });
+        doSearch(1, { formats: [], sizes: [], years: [], countries: [] });
       };
 
-      const handleFilterChange = (setter, key) => (e) => {
-        const val = e.target.value;
+      const handleFilterChange = (setter, key) => (val) => {
         setter(val);
         // For catno searches, filters are applied client-side (no re-fetch)
         if (searchType === 'catno') return;
-        const filters = { format: filterFormat, size: filterSize, year: filterYear, country: filterCountry, label: filterLabel };
+        const filters = { formats: filterFormats, sizes: filterSizes, years: filterYears, countries: filterCountries, labels: filterLabels };
         filters[key] = val;
         doSearch(1, filters);
       };
@@ -1372,21 +1451,22 @@
       // Normalize catno for exact matching: strip spaces and hyphens, lowercase
       const normCatno = (s) => (s || '').replace(/[\s\-]/g, '').toLowerCase();
 
-      // Client-side filtering for catno searches (already have full dataset)
+      // Client-side filtering (multi-select can't be pushed to API for >1 value,
+      // so always filter locally after results come back)
       const sizes = ['12"', '7"', '10"'];
-      const filtered = (searchType === 'catno') ? apiResults.filter(r => {
-        if (exactCatno && normCatno(r.catno) !== normCatno(query)) return false;
-        if (filterFormat && !(r.format || []).some(f => f === filterFormat)) return false;
-        if (filterSize) {
+      const filtered = apiResults.filter(r => {
+        if (searchType === 'catno' && exactCatno && normCatno(r.catno) !== normCatno(query)) return false;
+        if (filterFormats.length && !(r.format || []).some(f => filterFormats.includes(f))) return false;
+        if (filterSizes.length) {
           const fmts = r.format || [];
           const hasAnySize = fmts.some(f => sizes.some(s => f.includes(s)));
-          if (hasAnySize && !fmts.some(f => f.includes(filterSize))) return false;
+          if (hasAnySize && !fmts.some(f => filterSizes.some(s => f.includes(s)))) return false;
         }
-        if (filterYear && r.year !== filterYear) return false;
-        if (filterCountry && r.country !== filterCountry) return false;
-        if (filterLabel && !(r.label || []).some(l => l === filterLabel)) return false;
+        if (filterYears.length && !filterYears.includes(r.year)) return false;
+        if (filterCountries.length && !filterCountries.includes(r.country)) return false;
+        if (filterLabels.length && !(r.label || []).some(l => filterLabels.includes(l))) return false;
         return true;
-      }) : apiResults;
+      });
 
       // Split: local matches shown on top, API results without owned duplicates below
       const apiIds = new Set(filtered.map(r => r.id));
@@ -1404,16 +1484,19 @@
 
       // For catno searches, derive filter options from the visible results so
       // dropdowns only show values that exist after exact-match / other filtering.
-      // Always include the currently selected value so it remains visible for deselection.
+      // Always include any currently selected values so they remain visible for deselection.
       const visibleFilters = (searchType === 'catno') ? extractFilterOptions(filtered) : availableFilters;
-      const ensureSelected = (opts, selected) => selected && !opts.includes(selected) ? [...opts, selected] : opts;
-      const yearOptions = ensureSelected(visibleFilters.years, filterYear);
-      const countryOptions = ensureSelected(visibleFilters.countries, filterCountry);
-      const labelOptions = ensureSelected(visibleFilters.labels, filterLabel);
+      const ensureSelected = (opts, selected) => {
+        const missing = selected.filter(s => !opts.includes(s));
+        return missing.length ? [...opts, ...missing] : opts;
+      };
+      const yearOptions = ensureSelected(visibleFilters.years, filterYears);
+      const countryOptions = ensureSelected(visibleFilters.countries, filterCountries);
+      const labelOptions = ensureSelected(visibleFilters.labels, filterLabels);
       const rawFormats = visibleFilters.formats.length > 0
         ? visibleFilters.formats.filter(f => !['12"','7"','10"','LP'].includes(f))
         : ['Vinyl','CD','Cassette','DVD','Box Set'];
-      const formatOptions = ensureSelected(rawFormats, filterFormat);
+      const formatOptions = ensureSelected(rawFormats, filterFormats);
 
       const totalOwned = uniqueLocal.length + apiOwned.length;
       const totalResults = filtered.length + uniqueLocal.length;
@@ -1516,29 +1599,12 @@
                     {/* Filters — shown after search has results */}
                     {hasSearched && apiResults.length > 0 && (
                       <div className="filters">
-                        <select value={filterFormat} onChange={handleFilterChange(setFilterFormat, 'format')} className={filterFormat?'filter-active':''}>
-                          <option value="">Format...</option>
-                          {formatOptions.map(f => <option key={f} value={f}>{f}</option>)}
-                        </select>
-                        <select value={filterSize} onChange={handleFilterChange(setFilterSize, 'size')} className={filterSize?'filter-active':''}>
-                          <option value="">Size...</option>
-                          <option value='12"'>12"</option>
-                          <option value='7"'>7"</option>
-                          <option value='10"'>10"</option>
-                        </select>
-                        <select value={filterYear} onChange={handleFilterChange(setFilterYear, 'year')} className={filterYear?'filter-active':''}>
-                          <option value="">Year...</option>
-                          {yearOptions.map(y => <option key={y} value={y}>{y}</option>)}
-                        </select>
-                        <select value={filterCountry} onChange={handleFilterChange(setFilterCountry, 'country')} className={filterCountry?'filter-active':''}>
-                          <option value="">Country...</option>
-                          {countryOptions.map(c => <option key={c} value={c}>{c}</option>)}
-                        </select>
+                        <MultiSelect options={formatOptions} selected={filterFormats} onChange={handleFilterChange(setFilterFormats, 'formats')} placeholder="Format..." />
+                        <MultiSelect options={['12"','7"','10"']} selected={filterSizes} onChange={handleFilterChange(setFilterSizes, 'sizes')} placeholder="Size..." />
+                        <MultiSelect options={yearOptions} selected={filterYears} onChange={handleFilterChange(setFilterYears, 'years')} placeholder="Year..." />
+                        <MultiSelect options={countryOptions} selected={filterCountries} onChange={handleFilterChange(setFilterCountries, 'countries')} placeholder="Country..." />
                         {labelOptions.length > 0 && (
-                          <select value={filterLabel} onChange={handleFilterChange(setFilterLabel, 'label')} className={filterLabel?'filter-active':''}>
-                            <option value="">Label...</option>
-                            {labelOptions.map(l => <option key={l} value={l}>{l}</option>)}
-                          </select>
+                          <MultiSelect options={labelOptions} selected={filterLabels} onChange={handleFilterChange(setFilterLabels, 'labels')} placeholder="Label..." />
                         )}
                       </div>
                     )}
@@ -1637,7 +1703,7 @@
                                           folders={folders} fields={fields} defaultFolder={lastFolder} defaultMedia={lastMedia}
                                           onAdded={onAdded} onRemoved={onRemoved} onWanted={onWanted} onUnwanted={onUnwanted}
                                           onPrefsUpdate={handlePrefsUpdate} onSearchText={handleSearchText} onSearchCatno={handleSearchCatno}
-                                          onClose={() => setExpandedThumbId(null)} activeSizeFilter={filterSize} />
+                                          onClose={() => setExpandedThumbId(null)} activeSizeFilters={filterSizes} />
                                       </div>
                                     )}
                                   </React.Fragment>
@@ -1666,7 +1732,7 @@
                             {allOwnedApi.map(r => (
                               <ResultCard key={r.id} r={r} owned={true} wanted={wantlistIds.has(r.id)} collectionInstance={collectionMap[r.id]} token={token} username={username}
                                 folders={folders} fields={fields} defaultFolder={lastFolder} defaultMedia={lastMedia}
-                                onAdded={onAdded} onRemoved={onRemoved} onWanted={onWanted} onUnwanted={onUnwanted} onPrefsUpdate={handlePrefsUpdate} onSearchText={handleSearchText} onSearchCatno={handleSearchCatno} activeSizeFilter={filterSize} />
+                                onAdded={onAdded} onRemoved={onRemoved} onWanted={onWanted} onUnwanted={onUnwanted} onPrefsUpdate={handlePrefsUpdate} onSearchText={handleSearchText} onSearchCatno={handleSearchCatno} activeSizeFilters={filterSizes} />
                             ))}
                           </>
                         )}
@@ -1683,7 +1749,7 @@
                             {apiNotOwned.map(r => (
                               <ResultCard key={r.id} r={r} owned={false} wanted={wantlistIds.has(r.id)} token={token} username={username}
                                 folders={folders} fields={fields} defaultFolder={lastFolder} defaultMedia={lastMedia}
-                                onAdded={onAdded} onRemoved={onRemoved} onWanted={onWanted} onUnwanted={onUnwanted} onPrefsUpdate={handlePrefsUpdate} onSearchText={handleSearchText} onSearchCatno={handleSearchCatno} activeSizeFilter={filterSize} />
+                                onAdded={onAdded} onRemoved={onRemoved} onWanted={onWanted} onUnwanted={onUnwanted} onPrefsUpdate={handlePrefsUpdate} onSearchText={handleSearchText} onSearchCatno={handleSearchCatno} activeSizeFilters={filterSizes} />
                             ))}
                           </>
                         )}
@@ -1723,28 +1789,18 @@
                   const collPages = Math.ceil(collSorted.length / LIST_PAGE_SIZE) || 1;
                   const collPage = Math.min(page, collPages);
                   const collSlice = collSorted.slice((collPage - 1) * LIST_PAGE_SIZE, collPage * LIST_PAGE_SIZE);
-                  const hasCollFilter = collFilter.format || collFilter.year || collFilter.label || collFilter.folder;
+                  const hasCollFilter = collFilter.formats.length || collFilter.years.length || collFilter.labels.length || collFilter.folders.length;
+                  const folderOptsColl = folders.map(f => String(f.id));
+                  const folderLabelColl = (id) => { const f = folders.find(x => String(x.id) === id); return f ? `${f.name} (${f.count})` : id; };
                   return (
                     <>
                       {collectionRaw.length > 0 && (
                         <div className="filters">
-                          <select value={collFilter.format} onChange={e => { setCollFilter(f => ({...f, format: e.target.value})); setPage(1); }} className={collFilter.format?'filter-active':''}>
-                            <option value="">Format...</option>
-                            {collOpts.formats.filter(f => !['12"','7"','10"','LP'].includes(f)).map(f => <option key={f} value={f}>{f}</option>)}
-                          </select>
-                          <select value={collFilter.year} onChange={e => { setCollFilter(f => ({...f, year: e.target.value})); setPage(1); }} className={collFilter.year?'filter-active':''}>
-                            <option value="">Year...</option>
-                            {collOpts.years.map(y => <option key={y} value={y}>{y}</option>)}
-                          </select>
-                          <select value={collFilter.label} onChange={e => { setCollFilter(f => ({...f, label: e.target.value})); setPage(1); }} className={collFilter.label?'filter-active':''}>
-                            <option value="">Label...</option>
-                            {collOpts.labels.map(l => <option key={l} value={l}>{l}</option>)}
-                          </select>
+                          <MultiSelect options={collOpts.formats.filter(f => !['12"','7"','10"','LP'].includes(f))} selected={collFilter.formats} onChange={v => { setCollFilter(f => ({...f, formats: v})); setPage(1); }} placeholder="Format..." />
+                          <MultiSelect options={collOpts.years} selected={collFilter.years} onChange={v => { setCollFilter(f => ({...f, years: v})); setPage(1); }} placeholder="Year..." />
+                          <MultiSelect options={collOpts.labels} selected={collFilter.labels} onChange={v => { setCollFilter(f => ({...f, labels: v})); setPage(1); }} placeholder="Label..." />
                           {folders.length > 0 && (
-                            <select value={collFilter.folder} onChange={e => { setCollFilter(f => ({...f, folder: e.target.value})); setPage(1); }} className={collFilter.folder?'filter-active':''}>
-                              <option value="">Folder...</option>
-                              {folders.map(f => <option key={f.id} value={String(f.id)}>{f.name} ({f.count})</option>)}
-                            </select>
+                            <MultiSelect options={folderOptsColl} selected={collFilter.folders} onChange={v => { setCollFilter(f => ({...f, folders: v})); setPage(1); }} placeholder="Folder..." renderOption={folderLabelColl} />
                           )}
                         </div>
                       )}
@@ -1791,23 +1847,14 @@
                   const wantPages = Math.ceil(wantSorted.length / LIST_PAGE_SIZE) || 1;
                   const wantPage = Math.min(page, wantPages);
                   const wantSlice = wantSorted.slice((wantPage - 1) * LIST_PAGE_SIZE, wantPage * LIST_PAGE_SIZE);
-                  const hasWantFilter = wantFilter.format || wantFilter.year || wantFilter.label;
+                  const hasWantFilter = wantFilter.formats.length || wantFilter.years.length || wantFilter.labels.length;
                   return (
                     <>
                       {wantlistRaw.length > 0 && (
                         <div className="filters">
-                          <select value={wantFilter.format} onChange={e => { setWantFilter(f => ({...f, format: e.target.value})); setPage(1); }} className={wantFilter.format?'filter-active':''}>
-                            <option value="">Format...</option>
-                            {wantOpts.formats.filter(f => !['12"','7"','10"','LP'].includes(f)).map(f => <option key={f} value={f}>{f}</option>)}
-                          </select>
-                          <select value={wantFilter.year} onChange={e => { setWantFilter(f => ({...f, year: e.target.value})); setPage(1); }} className={wantFilter.year?'filter-active':''}>
-                            <option value="">Year...</option>
-                            {wantOpts.years.map(y => <option key={y} value={y}>{y}</option>)}
-                          </select>
-                          <select value={wantFilter.label} onChange={e => { setWantFilter(f => ({...f, label: e.target.value})); setPage(1); }} className={wantFilter.label?'filter-active':''}>
-                            <option value="">Label...</option>
-                            {wantOpts.labels.map(l => <option key={l} value={l}>{l}</option>)}
-                          </select>
+                          <MultiSelect options={wantOpts.formats.filter(f => !['12"','7"','10"','LP'].includes(f))} selected={wantFilter.formats} onChange={v => { setWantFilter(f => ({...f, formats: v})); setPage(1); }} placeholder="Format..." />
+                          <MultiSelect options={wantOpts.years} selected={wantFilter.years} onChange={v => { setWantFilter(f => ({...f, years: v})); setPage(1); }} placeholder="Year..." />
+                          <MultiSelect options={wantOpts.labels} selected={wantFilter.labels} onChange={v => { setWantFilter(f => ({...f, labels: v})); setPage(1); }} placeholder="Label..." />
                         </div>
                       )}
                       {wantlistRaw.length > 0 && (
