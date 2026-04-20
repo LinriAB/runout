@@ -45,6 +45,39 @@
     .header-badge { font-size: 10px; background: rgba(255,255,255,0.2); padding: 3px 8px; border-radius: 10px; }
 
     .container { max-width: 500px; margin: 0 auto; padding: 16px; padding-bottom: 80px; }
+    .sidebar, .main-col { min-width: 0; }
+    .result-grid { display: contents; }
+    .footer-cta { text-align: center; padding: 24px 0 8px; border-top: 1px solid #e5e5ea; margin-top: 24px; }
+
+    @media (min-width: 960px) {
+      body { overflow: hidden; }
+      .container {
+        max-width: 1280px;
+        display: grid;
+        grid-template-columns: 320px 1fr;
+        grid-template-rows: 1fr auto;
+        gap: 24px;
+        height: calc(100vh - 92px);
+        padding-bottom: 16px;
+        overflow: hidden;
+      }
+      .sidebar, .main-col {
+        overflow-y: auto;
+        min-height: 0;
+      }
+      .result-grid {
+        display: grid;
+        grid-template-columns: repeat(auto-fill, minmax(320px, 1fr));
+        gap: 12px;
+        align-items: start;
+        margin-bottom: 12px;
+      }
+      .result-grid > .card { margin-bottom: 0; }
+      .footer-cta { grid-column: 1 / -1; }
+    }
+    @media (min-width: 1280px) {
+      .result-grid { grid-template-columns: repeat(auto-fill, minmax(340px, 1fr)); }
+    }
 
     .card { background: white; border-radius: 14px; border: 1px solid #e5e5ea; box-shadow: 0 1px 3px rgba(0,0,0,0.06); margin-bottom: 12px; overflow: hidden; }
 
@@ -171,7 +204,7 @@
     .filter-active { border-color: #4f46e5 !important; background: #f0f0ff !important; }
 
     /* Multi-select filter */
-    .multiselect { position: relative; flex: 1; min-width: 0; }
+    .multiselect { position: relative; flex: 1 1 120px; min-width: 0; }
     .multiselect-btn {
       width: 100%; border: 1.5px solid #ddd; border-radius: 8px; padding: 7px 10px;
       font-size: 12px; background: white; cursor: pointer; text-align: left;
@@ -307,6 +340,9 @@
 
     /* Thumbnail grid */
     .thumb-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 4px; }
+    @media (min-width: 720px) { .thumb-grid { grid-template-columns: repeat(5, 1fr); } }
+    @media (min-width: 960px) { .thumb-grid { grid-template-columns: repeat(6, 1fr); } }
+    @media (min-width: 1280px) { .thumb-grid { grid-template-columns: repeat(8, 1fr); } }
     .thumb-grid-item { width: 100%; aspect-ratio: 1; border-radius: 8px; object-fit: cover; cursor: pointer; border: 2px solid transparent; transition: border-color 0.15s; }
     .thumb-grid-item:hover { border-color: #6366f1; }
     .thumb-grid-item.active { border-color: #4f46e5; box-shadow: 0 0 0 2px rgba(99,102,241,0.3); }
@@ -1392,6 +1428,18 @@
         doSearch(1, { formats: [], sizes: [], years: [], countries: [] });
       };
 
+      const handleClearSearch = () => {
+        searchGen.current++; // cancel any in-flight search
+        setQuery('');
+        setFilterFormats([]); setFilterSizes([]); setFilterYears([]); setFilterCountries([]); setFilterLabels([]);
+        setAvailableFilters({ years: [], countries: [], formats: [], labels: [] });
+        setApiResults([]); setLocalResults([]);
+        setHasSearched(false); setSearching(false); setError('');
+        setPagination(null); setPage(1);
+        setShowAllImages(false); setExpandedThumbId(null); setReleaseImages({});
+        imagesAbort.current = true;
+      };
+
       const handleFilterChange = (setter, key) => (val) => {
         setter(val);
         // For catno searches, filters are applied client-side (no re-fetch)
@@ -1512,6 +1560,57 @@
       const totalOwned = uniqueLocal.length + apiOwned.length;
       const totalResults = filtered.length + uniqueLocal.length;
 
+      // Collection view: compute filter/sort data once so both sidebar and main can use it
+      const collView = activeView === 'collection' ? (() => {
+        const q = collSearch.trim().toLowerCase();
+        const collFiltered = collectionRaw.filter(item => {
+          if (!filterCollectionItem(item, collFilter)) return false;
+          if (!q) return true;
+          const info = item.basic_information;
+          const artists = (info.artists || []).map(a => a.name.toLowerCase()).join(' ');
+          const title = (info.title || '').toLowerCase();
+          return artists.includes(q) || title.includes(q);
+        });
+        const collSorted = [...collFiltered].sort((a, b) => {
+          const aInfo = a.basic_information, bInfo = b.basic_information;
+          const aArtist = (aInfo.artists || []).map(x => x.name).join(', ').toLowerCase();
+          const bArtist = (bInfo.artists || []).map(x => x.name).join(', ').toLowerCase();
+          if (collSort === 'artist_year') {
+            const artistCmp = aArtist.localeCompare(bArtist);
+            if (artistCmp !== 0) return artistCmp;
+            return (aInfo.year || 0) - (bInfo.year || 0);
+          }
+          const aStr = aArtist + ' ' + (aInfo.title || '').toLowerCase();
+          const bStr = bArtist + ' ' + (bInfo.title || '').toLowerCase();
+          return aStr.localeCompare(bStr);
+        });
+        const collOpts = extractCollectionFilterOptions(collectionRaw);
+        const collPages = Math.ceil(collSorted.length / LIST_PAGE_SIZE) || 1;
+        const collPage = Math.min(page, collPages);
+        const collSlice = collSorted.slice((collPage - 1) * LIST_PAGE_SIZE, collPage * LIST_PAGE_SIZE);
+        const hasCollFilter = collFilter.formats.length || collFilter.years.length || collFilter.labels.length || collFilter.folders.length || q;
+        const folderOptsColl = folders.map(f => String(f.id));
+        const folderLabelColl = (id) => { const f = folders.find(x => String(x.id) === id); return f ? `${f.name} (${f.count})` : id; };
+        return { collSorted, collOpts, collPages, collPage, collSlice, hasCollFilter, folderOptsColl, folderLabelColl };
+      })() : null;
+
+      // Wantlist view: same pattern
+      const wantView = activeView === 'wantlist' ? (() => {
+        const wantFiltered = wantlistRaw.filter(item => filterCollectionItem(item, wantFilter));
+        const wantSorted = [...wantFiltered].sort((a, b) => {
+          const aInfo = a.basic_information, bInfo = b.basic_information;
+          const aStr = ((aInfo.artists || []).map(x => x.name).join(', ') + ' ' + aInfo.title).toLowerCase();
+          const bStr = ((bInfo.artists || []).map(x => x.name).join(', ') + ' ' + bInfo.title).toLowerCase();
+          return aStr.localeCompare(bStr);
+        });
+        const wantOpts = extractCollectionFilterOptions(wantlistRaw);
+        const wantPages = Math.ceil(wantSorted.length / LIST_PAGE_SIZE) || 1;
+        const wantPage = Math.min(page, wantPages);
+        const wantSlice = wantSorted.slice((wantPage - 1) * LIST_PAGE_SIZE, wantPage * LIST_PAGE_SIZE);
+        const hasWantFilter = wantFilter.formats.length || wantFilter.years.length || wantFilter.labels.length;
+        return { wantSorted, wantOpts, wantPages, wantPage, wantSlice, hasWantFilter };
+      })() : null;
+
       return (
         <div>
           <div className="header">
@@ -1524,126 +1623,165 @@
             </div>
           </div>
           <div className="container">
-            {/* Settings */}
-            <div className="card" style={{marginBottom:14}}>
-              <button className="settings-toggle" onClick={() => setSettingsOpen(!settingsOpen)}>
-                <span>{connected ? `✓ Connected as ${username}` : 'Settings'}</span>
-                <span className={`arrow ${settingsOpen ? 'open' : ''}`}>▼</span>
-              </button>
-              {settingsOpen && (
-                <div className="settings-body">
-                  <div className="field">
-                    <label>Discogs API Token</label>
-                    <input type="password" value={token} onChange={e=>setToken(e.target.value)} placeholder="Your personal access token" />
-                    <TokenHelp />
+            <aside className="sidebar">
+              <div className="sidebar-inner">
+              {/* Settings */}
+              <div className="card" style={{marginBottom:14}}>
+                <button className="settings-toggle" onClick={() => setSettingsOpen(!settingsOpen)}>
+                  <span>{connected ? `✓ Connected as ${username}` : 'Settings'}</span>
+                  <span className={`arrow ${settingsOpen ? 'open' : ''}`}>▼</span>
+                </button>
+                {settingsOpen && (
+                  <div className="settings-body">
+                    <div className="field">
+                      <label>Discogs API Token</label>
+                      <input type="password" value={token} onChange={e=>setToken(e.target.value)} placeholder="Your personal access token" />
+                      <TokenHelp />
+                    </div>
+                    <button className="btn-primary" onClick={() => handleConnect()} disabled={!token||collLoading}>
+                      {collLoading ? `Loading collection... ${loadProg}` : connected ? `Connected (${collectionRaw.length} records)` : 'Connect & load collection'}
+                    </button>
+                    {connected && cacheInfo && <div className="cache-msg">Cached: {cacheInfo.count} records, updated {timeAgo(cacheInfo.ts)}</div>}
+                    {connected && <button className="btn-secondary" onClick={handleRefresh} disabled={collLoading}>Refresh collection from Discogs</button>}
+                    {connected && <button className="btn-secondary" onClick={handleDisconnect}>Switch account</button>}
+                    {connected && <button className="btn-danger" onClick={handleDeleteAccount}>Delete cached data &amp; log out</button>}
+                    {!connected && accounts.length > 0 && (
+                      <div style={{marginTop:12}}>
+                        <label>Saved accounts</label>
+                        <div style={{display:'flex',flexDirection:'column',gap:6,marginTop:4}}>
+                          {accounts.map(a => (
+                            <button key={a.username} className="btn-secondary" style={{marginTop:0,display:'flex',justifyContent:'space-between',alignItems:'center'}}
+                              onClick={() => { handleSwitchAccount(a); handleConnect(a.token, a.username); }}>
+                              <span>{a.username}</span>
+                              <span style={{fontSize:11,color:'#999'}}>tap to connect</span>
+                            </button>
+                          ))}
+                        </div>
+                      </div>
+                    )}
                   </div>
-                  <button className="btn-primary" onClick={() => handleConnect()} disabled={!token||collLoading}>
-                    {collLoading ? `Loading collection... ${loadProg}` : connected ? `Connected (${collectionRaw.length} records)` : 'Connect & load collection'}
-                  </button>
-                  {connected && cacheInfo && <div className="cache-msg">Cached: {cacheInfo.count} records, updated {timeAgo(cacheInfo.ts)}</div>}
-                  {connected && <button className="btn-secondary" onClick={handleRefresh} disabled={collLoading}>Refresh collection from Discogs</button>}
-                  {connected && <button className="btn-secondary" onClick={handleDisconnect}>Switch account</button>}
-                  {connected && <button className="btn-danger" onClick={handleDeleteAccount}>Delete cached data &amp; log out</button>}
-                  {!connected && accounts.length > 0 && (
-                    <div style={{marginTop:12}}>
-                      <label>Saved accounts</label>
-                      <div style={{display:'flex',flexDirection:'column',gap:6,marginTop:4}}>
-                        {accounts.map(a => (
-                          <button key={a.username} className="btn-secondary" style={{marginTop:0,display:'flex',justifyContent:'space-between',alignItems:'center'}}
-                            onClick={() => { handleSwitchAccount(a); handleConnect(a.token, a.username); }}>
-                            <span>{a.username}</span>
-                            <span style={{fontSize:11,color:'#999'}}>tap to connect</span>
-                          </button>
+                )}
+              </div>
+
+              {connected && (
+                <>
+                  {/* View navigation */}
+                  <div className="view-nav">
+                    <button className={activeView==='search' ? 'active' : ''} onClick={()=>{setActiveView('search');setPage(1);}}>Search</button>
+                    <button className={activeView==='collection' ? 'active' : ''} onClick={()=>{setActiveView('collection');setPage(1);}}>Collection ({collectionRaw.length})</button>
+                    <button className={activeView==='wantlist' ? 'active' : ''} onClick={()=>{setActiveView('wantlist');setPage(1);}}>Wantlist ({wantlistRaw.length})</button>
+                  </div>
+
+                  {/* Search view: sidebar controls */}
+                  {activeView === 'search' && (
+                    <>
+                      <div className="search-tabs">
+                        {[['catno','Cat No'],['barcode','Barcode'],['query','Search']].map(([k,l]) => (
+                          <button key={k} className={`search-tab ${searchType===k ? 'active' : ''}`}
+                            onClick={()=>setSearchType(k)}>{l}</button>
                         ))}
                       </div>
+                      <form className="search-row" onSubmit={handleSubmit}>
+                        <div className="search-input-wrap">
+                          <input type="text" value={query}
+                            onChange={e=>setQuery(searchType==='catno' ? e.target.value.toUpperCase() : e.target.value)}
+                            style={searchType==='catno' ? {textTransform:'uppercase'} : {}}
+                            placeholder={
+                              searchType==='catno' ? 'Catalog number, e.g. SBLP 001...'
+                              : searchType==='barcode' ? 'Barcode number...'
+                              : 'Artist, titel...'
+                            } />
+                          {query && <button type="button" className="search-clear" onClick={handleClearSearch} aria-label="Clear">×</button>}
+                        </div>
+                        <button type="submit" disabled={!query.trim()||searching}>
+                          {searching ? <><span className="spinner"></span></> : 'Search'}
+                        </button>
+                      </form>
+                      {searchType === 'catno' && (
+                        <label style={{display:'flex',alignItems:'center',gap:6,fontSize:13,color:'#555',marginTop:6,cursor:'pointer'}}>
+                          <input type="checkbox" checked={exactCatno} onChange={e=>setExactCatno(e.target.checked)} />
+                          Exact matches only
+                        </label>
+                      )}
+                      {hasSearched && apiResults.length > 0 && (
+                        <div className="filters" style={{marginTop:10}}>
+                          <MultiSelect options={formatOptions} selected={filterFormats} onChange={handleFilterChange(setFilterFormats, 'formats')} placeholder="Format..." />
+                          <MultiSelect options={['12"','7"','10"']} selected={filterSizes} onChange={handleFilterChange(setFilterSizes, 'sizes')} placeholder="Size..." />
+                          <MultiSelect options={yearOptions} selected={filterYears} onChange={handleFilterChange(setFilterYears, 'years')} placeholder="Year..." />
+                          <MultiSelect options={countryOptions} selected={filterCountries} onChange={handleFilterChange(setFilterCountries, 'countries')} placeholder="Country..." />
+                          {labelOptions.length > 0 && (
+                            <MultiSelect options={labelOptions} selected={filterLabels} onChange={handleFilterChange(setFilterLabels, 'labels')} placeholder="Label..." />
+                          )}
+                        </div>
+                      )}
+                    </>
+                  )}
+
+                  {/* Collection view: sidebar controls */}
+                  {activeView === 'collection' && collView && collectionRaw.length > 0 && (
+                    <>
+                      <div className="search-row">
+                        <div className="search-input-wrap">
+                          <input type="text" value={collSearch}
+                            onChange={e => { setCollSearch(e.target.value); setPage(1); }}
+                            placeholder="Search artist or title..." />
+                          {collSearch && <button type="button" className="search-clear" onClick={()=>{setCollSearch(''); setPage(1);}} aria-label="Clear">×</button>}
+                        </div>
+                        <select value={collSort} onChange={e => setCollSort(e.target.value)}
+                          style={{width:'auto',padding:'0 12px',border:'1.5px solid #ddd',borderRadius:10,fontSize:13,background:'white'}}>
+                          <option value="artist_title">Artist + Title</option>
+                          <option value="artist_year">Artist + Year</option>
+                        </select>
+                      </div>
+                      <div className="filters">
+                        <MultiSelect options={collView.collOpts.formats.filter(f => !['12"','7"','10"','LP'].includes(f))} selected={collFilter.formats} onChange={v => { setCollFilter(f => ({...f, formats: v})); setPage(1); }} placeholder="Format..." />
+                        <MultiSelect options={collView.collOpts.years} selected={collFilter.years} onChange={v => { setCollFilter(f => ({...f, years: v})); setPage(1); }} placeholder="Year..." />
+                        <MultiSelect options={collView.collOpts.labels} selected={collFilter.labels} onChange={v => { setCollFilter(f => ({...f, labels: v})); setPage(1); }} placeholder="Label..." />
+                        {folders.length > 0 && (
+                          <MultiSelect options={collView.folderOptsColl} selected={collFilter.folders} onChange={v => { setCollFilter(f => ({...f, folders: v})); setPage(1); }} placeholder="Folder..." renderOption={collView.folderLabelColl} />
+                        )}
+                      </div>
+                    </>
+                  )}
+
+                  {/* Wantlist view: sidebar controls */}
+                  {activeView === 'wantlist' && wantView && wantlistRaw.length > 0 && (
+                    <div className="filters">
+                      <MultiSelect options={wantView.wantOpts.formats.filter(f => !['12"','7"','10"','LP'].includes(f))} selected={wantFilter.formats} onChange={v => { setWantFilter(f => ({...f, formats: v})); setPage(1); }} placeholder="Format..." />
+                      <MultiSelect options={wantView.wantOpts.years} selected={wantFilter.years} onChange={v => { setWantFilter(f => ({...f, years: v})); setPage(1); }} placeholder="Year..." />
+                      <MultiSelect options={wantView.wantOpts.labels} selected={wantFilter.labels} onChange={v => { setWantFilter(f => ({...f, labels: v})); setPage(1); }} placeholder="Label..." />
                     </div>
                   )}
-                </div>
+                </>
               )}
-            </div>
+              </div>
+            </aside>
 
-            {connected && (
-              <>
-                {/* View navigation */}
-                <div className="view-nav">
-                  <button className={activeView==='search' ? 'active' : ''} onClick={()=>{setActiveView('search');setPage(1);}}>Search</button>
-                  <button className={activeView==='collection' ? 'active' : ''} onClick={()=>{setActiveView('collection');setPage(1);}}>Collection ({collectionRaw.length})</button>
-                  <button className={activeView==='wantlist' ? 'active' : ''} onClick={()=>{setActiveView('wantlist');setPage(1);}}>Wantlist ({wantlistRaw.length})</button>
-                </div>
+            <main className="main-col">
+              {connected && activeView === 'search' && (
+                <>
+                  {error && <div className="error-msg">{error}</div>}
+                  {hasSearched && !searching && (
+                    <>
+                      {totalResults > 0 && (
+                        <div className="hit-count">
+                          {totalResults} results
+                          {totalOwned > 0 && ` · ${totalOwned} owned`}
+                          {pagination?.pages > 1 && (searchType !== 'catno' && searchType !== 'barcode') && ` · page ${page}/${pagination.pages}`}
+                        </div>
+                      )}
 
-                {/* ==================== Search view ==================== */}
-                {activeView === 'search' && (
-                  <>
-                    {/* Search type tabs */}
-                    <div className="search-tabs">
-                      {[['catno','Cat No'],['barcode','Barcode'],['query','Search']].map(([k,l]) => (
-                        <button key={k} className={`search-tab ${searchType===k ? 'active' : ''}`}
-                          onClick={()=>setSearchType(k)}>{l}</button>
-                      ))}
-                    </div>
+                      {totalResults > 0 && (
+                        <button className="gallery-toggle" style={{marginBottom:10}} onClick={() => {
+                          const next = !showAllImages;
+                          setShowAllImages(next);
+                          setExpandedThumbId(null);
+                        }}>
+                          {showAllImages ? '▾ Hide all images' : '▸ Show all images'}
+                        </button>
+                      )}
 
-                    {/* Search input */}
-                    <form className="search-row" onSubmit={handleSubmit}>
-                      <div className="search-input-wrap">
-                        <input type="text" value={query}
-                          onChange={e=>setQuery(searchType==='catno' ? e.target.value.toUpperCase() : e.target.value)}
-                          style={searchType==='catno' ? {textTransform:'uppercase'} : {}}
-                          placeholder={
-                            searchType==='catno' ? 'Catalog number, e.g. SBLP 001...'
-                            : searchType==='barcode' ? 'Barcode number...'
-                            : 'Artist, titel...'
-                          } />
-                        {query && <button type="button" className="search-clear" onClick={()=>setQuery('')} aria-label="Clear">×</button>}
-                      </div>
-                      <button type="submit" disabled={!query.trim()||searching}>
-                        {searching ? <><span className="spinner"></span></> : 'Search'}
-                      </button>
-                    </form>
-
-                    {searchType === 'catno' && (
-                      <label style={{display:'flex',alignItems:'center',gap:6,fontSize:13,color:'#555',marginTop:6,cursor:'pointer'}}>
-                        <input type="checkbox" checked={exactCatno} onChange={e=>setExactCatno(e.target.checked)} />
-                        Exact matches only
-                      </label>
-                    )}
-
-                    {/* Filters — shown after search has results */}
-                    {hasSearched && apiResults.length > 0 && (
-                      <div className="filters">
-                        <MultiSelect options={formatOptions} selected={filterFormats} onChange={handleFilterChange(setFilterFormats, 'formats')} placeholder="Format..." />
-                        <MultiSelect options={['12"','7"','10"']} selected={filterSizes} onChange={handleFilterChange(setFilterSizes, 'sizes')} placeholder="Size..." />
-                        <MultiSelect options={yearOptions} selected={filterYears} onChange={handleFilterChange(setFilterYears, 'years')} placeholder="Year..." />
-                        <MultiSelect options={countryOptions} selected={filterCountries} onChange={handleFilterChange(setFilterCountries, 'countries')} placeholder="Country..." />
-                        {labelOptions.length > 0 && (
-                          <MultiSelect options={labelOptions} selected={filterLabels} onChange={handleFilterChange(setFilterLabels, 'labels')} placeholder="Label..." />
-                        )}
-                      </div>
-                    )}
-
-                    {error && <div className="error-msg">{error}</div>}
-
-                    {/* Results */}
-                    {hasSearched && !searching && (
-                      <>
-                        {totalResults > 0 && (
-                          <div className="hit-count">
-                            {totalResults} results
-                            {totalOwned > 0 && ` · ${totalOwned} owned`}
-                            {pagination?.pages > 1 && (searchType !== 'catno' && searchType !== 'barcode') && ` · page ${page}/${pagination.pages}`}
-                          </div>
-                        )}
-
-                        {totalResults > 0 && (
-                          <button className="gallery-toggle" style={{marginBottom:10}} onClick={() => {
-                            const next = !showAllImages;
-                            setShowAllImages(next);
-                            setExpandedThumbId(null);
-                          }}>
-                            {showAllImages ? '▾ Hide all images' : '▸ Show all images'}
-                          </button>
-                        )}
-
-                        {showAllImages && totalResults > 0 && (() => {
+                      {showAllImages && totalResults > 0 && (() => {
                           const allReleases = [
                             ...uniqueLocal.map(item => ({ ...itemToResult(item) })),
                             ...filtered
@@ -1732,212 +1870,140 @@
                           );
                         })()}
 
-                        {/* Owned: local matches + API-owned, shown at top */}
-                        {totalOwned > 0 && (
-                          <>
-                            <div className="section-label owned">
-                              <span>In your collection ({totalOwned})</span>
-                              <span className="line"></span>
-                            </div>
+                      {/* Owned: local matches + API-owned, shown at top */}
+                      {totalOwned > 0 && (
+                        <>
+                          <div className="section-label owned">
+                            <span>In your collection ({totalOwned})</span>
+                            <span className="line"></span>
+                          </div>
+                          <div className="result-grid">
                             {uniqueLocal.map(item => <CollectionCard key={item.instance_id} item={item} />)}
                             {allOwnedApi.map(r => (
                               <ResultCard key={r.id} r={r} owned={true} wanted={wantlistIds.has(r.id)} collectionInstance={collectionMap[r.id]} token={token} username={username}
                                 folders={folders} fields={fields} defaultFolder={lastFolder} defaultMedia={lastMedia}
                                 onAdded={onAdded} onRemoved={onRemoved} onWanted={onWanted} onUnwanted={onUnwanted} onPrefsUpdate={handlePrefsUpdate} onSearchText={handleSearchText} onSearchCatno={handleSearchCatno} activeSizeFilters={filterSizes} />
                             ))}
-                          </>
-                        )}
+                          </div>
+                        </>
+                      )}
 
-                        {/* Not owned: only non-owned API results */}
-                        {apiNotOwned.length > 0 && (
-                          <>
-                            {totalOwned > 0 && (
-                              <div className="section-label discogs">
-                                <span>Other releases ({apiNotOwned.length})</span>
-                                <span className="line"></span>
-                              </div>
-                            )}
+                      {/* Not owned: only non-owned API results */}
+                      {apiNotOwned.length > 0 && (
+                        <>
+                          {totalOwned > 0 && (
+                            <div className="section-label discogs">
+                              <span>Other releases ({apiNotOwned.length})</span>
+                              <span className="line"></span>
+                            </div>
+                          )}
+                          <div className="result-grid">
                             {apiNotOwned.map(r => (
                               <ResultCard key={r.id} r={r} owned={false} wanted={wantlistIds.has(r.id)} token={token} username={username}
                                 folders={folders} fields={fields} defaultFolder={lastFolder} defaultMedia={lastMedia}
                                 onAdded={onAdded} onRemoved={onRemoved} onWanted={onWanted} onUnwanted={onUnwanted} onPrefsUpdate={handlePrefsUpdate} onSearchText={handleSearchText} onSearchCatno={handleSearchCatno} activeSizeFilters={filterSizes} />
                             ))}
-                          </>
-                        )}
-
-                        {totalResults === 0 && !error && <div className="empty-state"><p>No results</p></div>}
-
-                        {pagination?.pages > 1 && (searchType !== 'catno' && searchType !== 'barcode') && (
-                          <div className="pagination">
-                            <button onClick={()=>doSearch(page-1)} disabled={page<=1}>← Previous</button>
-                            <button onClick={()=>doSearch(page+1)} disabled={page>=pagination.pages}>Next →</button>
                           </div>
-                        )}
-                      </>
-                    )}
+                        </>
+                      )}
 
-                    {searching && <div className="empty-state"><div className="spinner" style={{width:24,height:24}}></div><p>Searching...</p></div>}
+                      {totalResults === 0 && !error && <div className="empty-state"><p>No results</p></div>}
 
-                    {!hasSearched && (
-                      <div className="empty-state">
-                        <div className="icon">🎵</div>
-                        <p>Search by catalog number, barcode or keywords</p>
-                      </div>
-                    )}
-                  </>
-                )}
-
-                {/* ==================== Collection view ==================== */}
-                {activeView === 'collection' && (() => {
-                  const q = collSearch.trim().toLowerCase();
-                  const collFiltered = collectionRaw.filter(item => {
-                    if (!filterCollectionItem(item, collFilter)) return false;
-                    if (!q) return true;
-                    const info = item.basic_information;
-                    const artists = (info.artists || []).map(a => a.name.toLowerCase()).join(' ');
-                    const title = (info.title || '').toLowerCase();
-                    return artists.includes(q) || title.includes(q);
-                  });
-                  const collSorted = [...collFiltered].sort((a, b) => {
-                    const aInfo = a.basic_information, bInfo = b.basic_information;
-                    const aArtist = (aInfo.artists || []).map(x => x.name).join(', ').toLowerCase();
-                    const bArtist = (bInfo.artists || []).map(x => x.name).join(', ').toLowerCase();
-                    if (collSort === 'artist_year') {
-                      const artistCmp = aArtist.localeCompare(bArtist);
-                      if (artistCmp !== 0) return artistCmp;
-                      return (aInfo.year || 0) - (bInfo.year || 0);
-                    }
-                    const aStr = aArtist + ' ' + (aInfo.title || '').toLowerCase();
-                    const bStr = bArtist + ' ' + (bInfo.title || '').toLowerCase();
-                    return aStr.localeCompare(bStr);
-                  });
-                  const collOpts = extractCollectionFilterOptions(collectionRaw);
-                  const collPages = Math.ceil(collSorted.length / LIST_PAGE_SIZE) || 1;
-                  const collPage = Math.min(page, collPages);
-                  const collSlice = collSorted.slice((collPage - 1) * LIST_PAGE_SIZE, collPage * LIST_PAGE_SIZE);
-                  const hasCollFilter = collFilter.formats.length || collFilter.years.length || collFilter.labels.length || collFilter.folders.length || q;
-                  const folderOptsColl = folders.map(f => String(f.id));
-                  const folderLabelColl = (id) => { const f = folders.find(x => String(x.id) === id); return f ? `${f.name} (${f.count})` : id; };
-                  return (
-                    <>
-                      {collectionRaw.length > 0 && (
-                        <div className="search-row">
-                          <div className="search-input-wrap">
-                            <input type="text" value={collSearch}
-                              onChange={e => { setCollSearch(e.target.value); setPage(1); }}
-                              placeholder="Search artist or title..." />
-                            {collSearch && <button type="button" className="search-clear" onClick={()=>{setCollSearch(''); setPage(1);}} aria-label="Clear">×</button>}
-                          </div>
-                          <select value={collSort} onChange={e => setCollSort(e.target.value)}
-                            style={{width:'auto',padding:'0 12px',border:'1.5px solid #ddd',borderRadius:10,fontSize:13,background:'white'}}>
-                            <option value="artist_title">Artist + Title</option>
-                            <option value="artist_year">Artist + Year</option>
-                          </select>
-                        </div>
-                      )}
-                      {collectionRaw.length > 0 && (
-                        <div className="filters">
-                          <MultiSelect options={collOpts.formats.filter(f => !['12"','7"','10"','LP'].includes(f))} selected={collFilter.formats} onChange={v => { setCollFilter(f => ({...f, formats: v})); setPage(1); }} placeholder="Format..." />
-                          <MultiSelect options={collOpts.years} selected={collFilter.years} onChange={v => { setCollFilter(f => ({...f, years: v})); setPage(1); }} placeholder="Year..." />
-                          <MultiSelect options={collOpts.labels} selected={collFilter.labels} onChange={v => { setCollFilter(f => ({...f, labels: v})); setPage(1); }} placeholder="Label..." />
-                          {folders.length > 0 && (
-                            <MultiSelect options={folderOptsColl} selected={collFilter.folders} onChange={v => { setCollFilter(f => ({...f, folders: v})); setPage(1); }} placeholder="Folder..." renderOption={folderLabelColl} />
-                          )}
-                        </div>
-                      )}
-                      {collectionRaw.length > 0 && (
-                        <div className="hit-count">{hasCollFilter ? `${collSorted.length} of ${collectionRaw.length}` : collectionRaw.length} releases in your collection{collPages > 1 && ` · page ${collPage}/${collPages}`}</div>
-                      )}
-                      {collSlice.map(item => {
-                        const r = itemToResult(item);
-                        return (
-                          <ResultCard key={item.instance_id} r={r} owned={true} hideOwned={true} collectionInstance={item} wanted={wantlistIds.has(r.id)} token={token} username={username}
-                            folders={folders} fields={fields} defaultFolder={lastFolder} defaultMedia={lastMedia}
-                            onAdded={onAdded} onRemoved={onRemoved} onWanted={onWanted} onUnwanted={onUnwanted} onPrefsUpdate={handlePrefsUpdate} onSearchText={handleSearchText} onSearchCatno={handleSearchCatno} />
-                        );
-                      })}
-                      {collectionRaw.length === 0 && (
-                        <div className="empty-state">
-                          <div className="icon">📀</div>
-                          <p>Your collection is empty</p>
-                        </div>
-                      )}
-                      {collSorted.length > 0 && collSlice.length === 0 && (
-                        <div className="empty-state"><p>No matches for current filters</p></div>
-                      )}
-                      {collPages > 1 && (
+                      {pagination?.pages > 1 && (searchType !== 'catno' && searchType !== 'barcode') && (
                         <div className="pagination">
-                          <button onClick={()=>setPage(Math.max(1, collPage-1))} disabled={collPage<=1}>← Previous</button>
-                          <button onClick={()=>setPage(Math.min(collPages, collPage+1))} disabled={collPage>=collPages}>Next →</button>
+                          <button onClick={()=>doSearch(page-1)} disabled={page<=1}>← Previous</button>
+                          <button onClick={()=>doSearch(page+1)} disabled={page>=pagination.pages}>Next →</button>
                         </div>
                       )}
                     </>
-                  );
-                })()}
+                  )}
 
-                {/* ==================== Wantlist view ==================== */}
-                {activeView === 'wantlist' && (() => {
-                  const wantFiltered = wantlistRaw.filter(item => filterCollectionItem(item, wantFilter));
-                  const wantSorted = [...wantFiltered].sort((a, b) => {
-                    const aInfo = a.basic_information, bInfo = b.basic_information;
-                    const aStr = ((aInfo.artists || []).map(x => x.name).join(', ') + ' ' + aInfo.title).toLowerCase();
-                    const bStr = ((bInfo.artists || []).map(x => x.name).join(', ') + ' ' + bInfo.title).toLowerCase();
-                    return aStr.localeCompare(bStr);
-                  });
-                  const wantOpts = extractCollectionFilterOptions(wantlistRaw);
-                  const wantPages = Math.ceil(wantSorted.length / LIST_PAGE_SIZE) || 1;
-                  const wantPage = Math.min(page, wantPages);
-                  const wantSlice = wantSorted.slice((wantPage - 1) * LIST_PAGE_SIZE, wantPage * LIST_PAGE_SIZE);
-                  const hasWantFilter = wantFilter.formats.length || wantFilter.years.length || wantFilter.labels.length;
-                  return (
-                    <>
-                      {wantlistRaw.length > 0 && (
-                        <div className="filters">
-                          <MultiSelect options={wantOpts.formats.filter(f => !['12"','7"','10"','LP'].includes(f))} selected={wantFilter.formats} onChange={v => { setWantFilter(f => ({...f, formats: v})); setPage(1); }} placeholder="Format..." />
-                          <MultiSelect options={wantOpts.years} selected={wantFilter.years} onChange={v => { setWantFilter(f => ({...f, years: v})); setPage(1); }} placeholder="Year..." />
-                          <MultiSelect options={wantOpts.labels} selected={wantFilter.labels} onChange={v => { setWantFilter(f => ({...f, labels: v})); setPage(1); }} placeholder="Label..." />
-                        </div>
-                      )}
-                      {wantlistRaw.length > 0 && (
-                        <div className="hit-count">{hasWantFilter ? `${wantSorted.length} of ${wantlistRaw.length}` : wantlistRaw.length} releases in your wantlist{wantPages > 1 && ` · page ${wantPage}/${wantPages}`}</div>
-                      )}
-                      {wantSlice.map(w => {
-                        const r = itemToResult(w);
-                        return (
-                          <ResultCard key={r.id} r={r} owned={collectionIds.has(r.id)} wanted={true} collectionInstance={collectionMap[r.id]} token={token} username={username}
-                            folders={folders} fields={fields} defaultFolder={lastFolder} defaultMedia={lastMedia}
-                            onAdded={onAdded} onRemoved={onRemoved} onWanted={onWanted} onUnwanted={onUnwanted} onPrefsUpdate={handlePrefsUpdate} onSearchText={handleSearchText} onSearchCatno={handleSearchCatno} />
-                        );
-                      })}
-                      {wantlistRaw.length === 0 && (
-                        <div className="empty-state">
-                          <div className="icon">♡</div>
-                          <p>Your wantlist is empty</p>
-                        </div>
-                      )}
-                      {wantSorted.length > 0 && wantSlice.length === 0 && (
-                        <div className="empty-state"><p>No matches for current filters</p></div>
-                      )}
-                      {wantPages > 1 && (
-                        <div className="pagination">
-                          <button onClick={()=>setPage(Math.max(1, wantPage-1))} disabled={wantPage<=1}>← Previous</button>
-                          <button onClick={()=>setPage(Math.min(wantPages, wantPage+1))} disabled={wantPage>=wantPages}>Next →</button>
-                        </div>
-                      )}
-                    </>
-                  );
-                })()}
-              </>
-            )}
+                  {searching && <div className="empty-state"><div className="spinner" style={{width:24,height:24}}></div><p>Searching...</p></div>}
 
-            {!connected && !collLoading && (
-              <div className="empty-state">
-                <div className="icon">🎵</div>
-                <p>Enter your Discogs API token above to get started</p>
-              </div>
-            )}
+                  {!hasSearched && (
+                    <div className="empty-state">
+                      <div className="icon">🎵</div>
+                      <p>Search by catalog number, barcode or keywords</p>
+                    </div>
+                  )}
+                </>
+              )}
 
-            <div style={{textAlign:'center',padding:'24px 0 8px',borderTop:'1px solid #e5e5ea',marginTop:24}}>
+              {connected && activeView === 'collection' && collView && (
+                <>
+                  {collectionRaw.length > 0 && (
+                    <div className="hit-count">{collView.hasCollFilter ? `${collView.collSorted.length} of ${collectionRaw.length}` : collectionRaw.length} releases in your collection{collView.collPages > 1 && ` · page ${collView.collPage}/${collView.collPages}`}</div>
+                  )}
+                  <div className="result-grid">
+                    {collView.collSlice.map(item => {
+                      const r = itemToResult(item);
+                      return (
+                        <ResultCard key={item.instance_id} r={r} owned={true} hideOwned={true} collectionInstance={item} wanted={wantlistIds.has(r.id)} token={token} username={username}
+                          folders={folders} fields={fields} defaultFolder={lastFolder} defaultMedia={lastMedia}
+                          onAdded={onAdded} onRemoved={onRemoved} onWanted={onWanted} onUnwanted={onUnwanted} onPrefsUpdate={handlePrefsUpdate} onSearchText={handleSearchText} onSearchCatno={handleSearchCatno} />
+                      );
+                    })}
+                  </div>
+                  {collectionRaw.length === 0 && (
+                    <div className="empty-state">
+                      <div className="icon">📀</div>
+                      <p>Your collection is empty</p>
+                    </div>
+                  )}
+                  {collView.collSorted.length > 0 && collView.collSlice.length === 0 && (
+                    <div className="empty-state"><p>No matches for current filters</p></div>
+                  )}
+                  {collView.collPages > 1 && (
+                    <div className="pagination">
+                      <button onClick={()=>setPage(Math.max(1, collView.collPage-1))} disabled={collView.collPage<=1}>← Previous</button>
+                      <button onClick={()=>setPage(Math.min(collView.collPages, collView.collPage+1))} disabled={collView.collPage>=collView.collPages}>Next →</button>
+                    </div>
+                  )}
+                </>
+              )}
+
+              {connected && activeView === 'wantlist' && wantView && (
+                <>
+                  {wantlistRaw.length > 0 && (
+                    <div className="hit-count">{wantView.hasWantFilter ? `${wantView.wantSorted.length} of ${wantlistRaw.length}` : wantlistRaw.length} releases in your wantlist{wantView.wantPages > 1 && ` · page ${wantView.wantPage}/${wantView.wantPages}`}</div>
+                  )}
+                  <div className="result-grid">
+                    {wantView.wantSlice.map(w => {
+                      const r = itemToResult(w);
+                      return (
+                        <ResultCard key={r.id} r={r} owned={collectionIds.has(r.id)} wanted={true} collectionInstance={collectionMap[r.id]} token={token} username={username}
+                          folders={folders} fields={fields} defaultFolder={lastFolder} defaultMedia={lastMedia}
+                          onAdded={onAdded} onRemoved={onRemoved} onWanted={onWanted} onUnwanted={onUnwanted} onPrefsUpdate={handlePrefsUpdate} onSearchText={handleSearchText} onSearchCatno={handleSearchCatno} />
+                      );
+                    })}
+                  </div>
+                  {wantlistRaw.length === 0 && (
+                    <div className="empty-state">
+                      <div className="icon">♡</div>
+                      <p>Your wantlist is empty</p>
+                    </div>
+                  )}
+                  {wantView.wantSorted.length > 0 && wantView.wantSlice.length === 0 && (
+                    <div className="empty-state"><p>No matches for current filters</p></div>
+                  )}
+                  {wantView.wantPages > 1 && (
+                    <div className="pagination">
+                      <button onClick={()=>setPage(Math.max(1, wantView.wantPage-1))} disabled={wantView.wantPage<=1}>← Previous</button>
+                      <button onClick={()=>setPage(Math.min(wantView.wantPages, wantView.wantPage+1))} disabled={wantView.wantPage>=wantView.wantPages}>Next →</button>
+                    </div>
+                  )}
+                </>
+              )}
+
+              {!connected && !collLoading && (
+                <div className="empty-state">
+                  <div className="icon">🎵</div>
+                  <p>Enter your Discogs API token above to get started</p>
+                </div>
+              )}
+            </main>
+
+            <div className="footer-cta">
               <a href="https://buymeacoffee.com/RickardEngberg" target="_blank" rel="noopener"
                 style={{display:'inline-flex',alignItems:'center',gap:6,background:'#FFDD00',color:'#000',fontWeight:700,fontSize:13,padding:'8px 18px',borderRadius:10,textDecoration:'none'}}>
                 ☕ Buy me a coffee
