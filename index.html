@@ -347,6 +347,13 @@
     .thumb-grid-item:hover { border-color: #6366f1; }
     .thumb-grid-item.active { border-color: #4f46e5; box-shadow: 0 0 0 2px rgba(99,102,241,0.3); }
     .thumb-grid-expanded { grid-column: 1 / -1; position: relative; }
+    .thumb-preview {
+      position: fixed; z-index: 200; pointer-events: none;
+      padding: 4px; background: white; border-radius: 10px;
+      box-shadow: 0 8px 24px rgba(0,0,0,0.3); border: 1px solid rgba(0,0,0,0.1);
+    }
+    .thumb-preview img { display: block; max-width: 400px; max-height: 400px; border-radius: 6px; }
+    @media (pointer: coarse) { .thumb-preview { display: none; } }
     .result-close {
       position: absolute; top: 10px; right: 10px; z-index: 10;
       width: 28px; height: 28px; border-radius: 50%; border: none;
@@ -1186,6 +1193,20 @@
       const [imagesLoading, setImagesLoading] = useState(false);
       const [imagesProgress, setImagesProgress] = useState('');
       const imagesAbort = useRef(false);
+      const [hoverPreview, setHoverPreview] = useState(null);
+      const previewRef = useRef(null);
+
+      const movePreview = (e) => {
+        if (!previewRef.current) return;
+        const offset = 24;
+        const W = 420, H = 420;
+        let x = e.clientX + offset;
+        let y = e.clientY + offset;
+        if (x + W > window.innerWidth) x = e.clientX - offset - W;
+        if (y + H > window.innerHeight) y = e.clientY - offset - H;
+        previewRef.current.style.left = `${Math.max(8, x)}px`;
+        previewRef.current.style.top = `${Math.max(8, y)}px`;
+      };
 
       // Collection/Wantlist filters
       const [collFilter, setCollFilter] = useState({ formats: [], years: [], labels: [], folders: [] });
@@ -1843,6 +1864,9 @@
                                       alt={t.img.type || ''}
                                       title={`${t.release.title} — ${t.img.type || 'image'}`}
                                       onClick={() => setExpandedThumbId(expandedThumbId === t.key ? null : t.key)}
+                                      onMouseEnter={e => { setHoverPreview({ uri: t.img.uri, x: e.clientX, y: e.clientY }); }}
+                                      onMouseMove={movePreview}
+                                      onMouseLeave={() => setHoverPreview(null)}
                                       onError={e => e.target.style.display='none'}
                                     />
                                     {expandedThumbId === t.key && (
@@ -2011,6 +2035,11 @@
               <p style={{fontSize:11,color:'#aaa',marginTop:8}}>If you find RunOut useful, consider supporting its development</p>
             </div>
           </div>
+          {hoverPreview && (
+            <div ref={previewRef} className="thumb-preview" style={{left: hoverPreview.x + 24, top: hoverPreview.y + 24}}>
+              <img src={hoverPreview.uri} alt="" />
+            </div>
+          )}
         </div>
       );
     }
