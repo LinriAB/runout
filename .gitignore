@@ -35,3 +35,5 @@ native/ios/App/App.xcworkspace/xcuserdata/
 .env.local
 
 keys/
+
+native/android/key.properties

@@ -13,8 +13,8 @@ truth; these artifacts wrap or reference it.
   - Feature graphic / hero image
   - At least 2–3 screenshots per target device class
   - Short description (≤80 chars) and full description (≤4000 chars)
-  - Privacy policy URL (required — RunOut stores data locally, token in
-    localStorage; disclose this)
+  - Privacy policy URL: `https://app.runout.io/privacy.html` (the file lives
+    in the PWA directory and is deployed alongside the app)
 
 ---
 
