@@ -479,6 +479,12 @@
       if (!r.ok && r.status !== 204) throw new Error(`${r.status} ${r.statusText}`);
     }
 
+    async function fetchIdentity(token) {
+      const d = await dGet('/oauth/identity', token);
+      if (!d.username) throw new Error('Could not fetch Discogs identity');
+      return d;
+    }
+
     async function loadCollectionFromAPI(user, token, cb) {
       let page = 1, all = [], total = 0;
       while (true) {
@@ -1067,17 +1073,23 @@
 
       // Auto-connect
       useEffect(() => {
-        if (saved.token && saved.username && !connected && !collLoading) {
+        if (saved.token && !connected && !collLoading) {
           handleConnect(saved.token, saved.username);
         }
       }, []);
 
       const handleConnect = async (t, u, forceRefresh) => {
         const tk = t || token;
-        const un = u || username;
-        if (!tk || !un) return;
+        if (!tk) return;
         setCollLoading(true); setLoadProg('');
         try {
+          let un = u || username;
+          if (!un) {
+            setLoadProg('Fetching account...');
+            const ident = await fetchIdentity(tk);
+            un = ident.username;
+            setUsername(un);
+          }
           let items;
           const cached = !forceRefresh && loadCachedCollection(un);
           if (cached && cached.items) {
@@ -1431,12 +1443,7 @@
                     <input type="password" value={token} onChange={e=>setToken(e.target.value)} placeholder="Your personal access token" />
                     <TokenHelp />
                   </div>
-                  <div className="field">
-                    <label>Discogs Username</label>
-                    <input type="text" value={username} onChange={e=>setUsername(e.target.value)} placeholder="Your Discogs username" />
-                    <div style={{fontSize:11,color:'#888',marginTop:4}}>Must match your Discogs username exactly (case-sensitive)</div>
-                  </div>
-                  <button className="btn-primary" onClick={() => handleConnect()} disabled={!token||!username||collLoading}>
+                  <button className="btn-primary" onClick={() => handleConnect()} disabled={!token||collLoading}>
                     {collLoading ? `Loading collection... ${loadProg}` : connected ? `Connected (${collectionRaw.length} records)` : 'Connect & load collection'}
                   </button>
                   {connected && cacheInfo && <div className="cache-msg">Cached: {cacheInfo.count} records, updated {timeAgo(cacheInfo.ts)}</div>}
@@ -1838,7 +1845,7 @@
             {!connected && !collLoading && (
               <div className="empty-state">
                 <div className="icon">🎵</div>
-                <p>Enter your Discogs API token and username above to get started</p>
+                <p>Enter your Discogs API token above to get started</p>
               </div>
             )}
 
