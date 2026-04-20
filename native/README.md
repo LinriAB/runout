@@ -13,8 +13,15 @@ Native iOS/Android wrapper for the RunOut PWA.
     └── capacitor.config.ts
 ```
 
-The `webDir` in `capacitor.config.ts` points to `..` (repo root), so both the PWA
-and the native apps share the **exact same source code**. No build step needed.
+Capacitor requires `webDir` to live inside this folder, so `copy-web.js` mirrors
+the PWA files from the parent directory into `./www` before sync. The web app
+and the native apps share the **same source code** — just run `npm run cap:sync`
+after editing the PWA to update both platforms.
+
+## Plugins
+
+- `@capacitor-mlkit/barcode-scanning` — powers the camera button in the Barcode
+  search tab. The button only appears when running inside the native app.
 
 ## Prerequisites
 

@@ -3,14 +3,16 @@
   "version": "1.0.0",
   "description": "RunOut — native app wrapper via Capacitor",
   "scripts": {
-    "cap:sync": "npx cap sync",
+    "copy:web": "node copy-web.js",
+    "cap:sync": "npm run copy:web && npx cap sync",
     "cap:open:ios": "npx cap open ios",
     "cap:open:android": "npx cap open android",
-    "cap:run:ios": "npx cap run ios",
-    "cap:run:android": "npx cap run android"
+    "cap:run:ios": "npm run copy:web && npx cap run ios",
+    "cap:run:android": "npm run copy:web && npx cap run android"
   },
   "license": "MIT",
   "dependencies": {
+    "@capacitor-mlkit/barcode-scanning": "^8.0.1",
     "@capacitor/android": "^8.3.0",
     "@capacitor/cli": "^8.3.0",
     "@capacitor/core": "^8.3.0",

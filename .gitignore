@@ -33,3 +33,5 @@ native/ios/App/App.xcworkspace/xcuserdata/
 # Environment / secrets
 .env
 .env.local
+
+keys/

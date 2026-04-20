@@ -139,6 +139,10 @@
       font-size: 14px; font-weight: 600; cursor: pointer; white-space: nowrap;
     }
     .search-row button:disabled { opacity: 0.4; cursor: not-allowed; }
+    .btn-scan {
+      padding: 0 14px !important; font-size: 18px !important;
+      background: white !important; color: #4f46e5 !important; border: 1.5px solid #c7d2fe !important;
+    }
 
     .clickable-text { cursor: pointer; text-decoration: underline; text-decoration-color: transparent; transition: text-decoration-color 0.2s; }
     .clickable-text:hover { text-decoration-color: currentColor; }
@@ -410,6 +414,25 @@
     const { useState, useEffect, useRef } = React;
 
     const API = "https://api.discogs.com";
+    const IS_NATIVE = typeof window !== 'undefined' && !!(window.Capacitor && window.Capacitor.isNativePlatform && window.Capacitor.isNativePlatform());
+
+    async function scanBarcode() {
+      const BS = window.Capacitor && window.Capacitor.Plugins && window.Capacitor.Plugins.BarcodeScanner;
+      if (!BS) return null;
+      try {
+        const perm = await BS.requestPermissions();
+        if (perm && perm.camera !== 'granted' && perm.camera !== 'limited') {
+          alert('Camera permission is required to scan barcodes');
+          return null;
+        }
+        const result = await BS.scan();
+        const code = result && result.barcodes && result.barcodes[0] && result.barcodes[0].rawValue;
+        return code || null;
+      } catch (e) {
+        if (e && e.message && !/cancel/i.test(e.message)) alert('Scan failed: ' + e.message);
+        return null;
+      }
+    }
     const CONDITIONS = [
       'Mint (M)', 'Near Mint (NM or M-)', 'Very Good Plus (VG+)',
       'Very Good (VG)', 'Good Plus (G+)', 'Good (G)', 'Fair (F)', 'Poor (P)'
@@ -1714,6 +1737,17 @@
                             } />
                           {query && <button type="button" className="search-clear" onClick={handleClearSearch} aria-label="Clear">×</button>}
                         </div>
+                        {searchType === 'barcode' && IS_NATIVE && (
+                          <button type="button" className="btn-scan" onClick={async () => {
+                            const code = await scanBarcode();
+                            if (code) {
+                              setQuery(code);
+                              setFilterFormats([]); setFilterSizes([]); setFilterYears([]); setFilterCountries([]); setFilterLabels([]);
+                              setAvailableFilters({ years: [], countries: [], formats: [], labels: [] });
+                              doSearch(1, { formats: [], sizes: [], years: [], countries: [] }, code, 'barcode');
+                            }
+                          }} aria-label="Scan barcode">📷</button>
+                        )}
                         <button type="submit" disabled={!query.trim()||searching}>
                           {searching ? <><span className="spinner"></span></> : 'Search'}
                         </button>
