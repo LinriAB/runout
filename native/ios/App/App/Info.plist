@@ -47,5 +47,7 @@
 	</array>
 	<key>UIViewControllerBasedStatusBarAppearance</key>
 	<true/>
+	<key>NSCameraUsageDescription</key>
+	<string>RunOut uses the camera to scan barcodes on vinyl records so you can quickly look them up on Discogs.</string>
 </dict>
 </plist>
