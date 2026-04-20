@@ -817,11 +817,16 @@
                 <div style={{minWidth:0}}>
                   <div className="result-title result-title-wrap">{(() => {
                     const t = r.title || '';
-                    const sep = t.indexOf(' - ');
-                    if (sep === -1 || !onSearchText) return t;
-                    const artist = t.slice(0, sep);
-                    const title = t.slice(sep + 3);
-                    return <><span className="clickable-text" onClick={()=>onSearchText(artist)}>{artist}</span>{' - '}<span className="clickable-text" onClick={()=>onSearchText(`${artist} ${title}`)}>{title}</span></>;
+                    if (!onSearchText) return t;
+                    let sepIdx = -1, sepLen = 0, sepStr = '';
+                    for (const s of [' \u2014 ', ' - ']) {
+                      const i = t.indexOf(s);
+                      if (i !== -1) { sepIdx = i; sepLen = s.length; sepStr = s; break; }
+                    }
+                    if (sepIdx === -1) return t;
+                    const artist = t.slice(0, sepIdx);
+                    const title = t.slice(sepIdx + sepLen);
+                    return <><span className="clickable-text" onClick={()=>onSearchText(artist)}>{artist}</span>{sepStr}<span className="clickable-text" onClick={()=>onSearchText(`${artist} ${title}`)}>{title}</span></>;
                   })()}</div>
                   {r.catno && r.catno !== 'none' && <div className="result-catno">Cat# {onSearchCatno ? <span className="clickable-text" onClick={() => onSearchCatno(r.catno)}>{r.catno}</span> : r.catno}</div>}
                   {r.label?.length > 0 && <div className="result-label">{r.label.filter(l=>l!=='Not On Label').join(', ')}</div>}
@@ -1145,6 +1150,8 @@
       // Collection/Wantlist filters
       const [collFilter, setCollFilter] = useState({ formats: [], years: [], labels: [], folders: [] });
       const [wantFilter, setWantFilter] = useState({ formats: [], years: [], labels: [] });
+      const [collSearch, setCollSearch] = useState('');
+      const [collSort, setCollSort] = useState('artist_title');
 
       const [lastFolder, setLastFolder] = useState(prefs.lastFolder || '1');
       const [lastMedia, setLastMedia] = useState(prefs.lastMedia || '');
@@ -1778,22 +1785,52 @@
 
                 {/* ==================== Collection view ==================== */}
                 {activeView === 'collection' && (() => {
-                  const collFiltered = collectionRaw.filter(item => filterCollectionItem(item, collFilter));
+                  const q = collSearch.trim().toLowerCase();
+                  const collFiltered = collectionRaw.filter(item => {
+                    if (!filterCollectionItem(item, collFilter)) return false;
+                    if (!q) return true;
+                    const info = item.basic_information;
+                    const artists = (info.artists || []).map(a => a.name.toLowerCase()).join(' ');
+                    const title = (info.title || '').toLowerCase();
+                    return artists.includes(q) || title.includes(q);
+                  });
                   const collSorted = [...collFiltered].sort((a, b) => {
                     const aInfo = a.basic_information, bInfo = b.basic_information;
-                    const aStr = ((aInfo.artists || []).map(x => x.name).join(', ') + ' ' + aInfo.title).toLowerCase();
-                    const bStr = ((bInfo.artists || []).map(x => x.name).join(', ') + ' ' + bInfo.title).toLowerCase();
+                    const aArtist = (aInfo.artists || []).map(x => x.name).join(', ').toLowerCase();
+                    const bArtist = (bInfo.artists || []).map(x => x.name).join(', ').toLowerCase();
+                    if (collSort === 'artist_year') {
+                      const artistCmp = aArtist.localeCompare(bArtist);
+                      if (artistCmp !== 0) return artistCmp;
+                      return (aInfo.year || 0) - (bInfo.year || 0);
+                    }
+                    const aStr = aArtist + ' ' + (aInfo.title || '').toLowerCase();
+                    const bStr = bArtist + ' ' + (bInfo.title || '').toLowerCase();
                     return aStr.localeCompare(bStr);
                   });
                   const collOpts = extractCollectionFilterOptions(collectionRaw);
                   const collPages = Math.ceil(collSorted.length / LIST_PAGE_SIZE) || 1;
                   const collPage = Math.min(page, collPages);
                   const collSlice = collSorted.slice((collPage - 1) * LIST_PAGE_SIZE, collPage * LIST_PAGE_SIZE);
-                  const hasCollFilter = collFilter.formats.length || collFilter.years.length || collFilter.labels.length || collFilter.folders.length;
+                  const hasCollFilter = collFilter.formats.length || collFilter.years.length || collFilter.labels.length || collFilter.folders.length || q;
                   const folderOptsColl = folders.map(f => String(f.id));
                   const folderLabelColl = (id) => { const f = folders.find(x => String(x.id) === id); return f ? `${f.name} (${f.count})` : id; };
                   return (
                     <>
+                      {collectionRaw.length > 0 && (
+                        <div className="search-row">
+                          <div className="search-input-wrap">
+                            <input type="text" value={collSearch}
+                              onChange={e => { setCollSearch(e.target.value); setPage(1); }}
+                              placeholder="Search artist or title..." />
+                            {collSearch && <button type="button" className="search-clear" onClick={()=>{setCollSearch(''); setPage(1);}} aria-label="Clear">×</button>}
+                          </div>
+                          <select value={collSort} onChange={e => setCollSort(e.target.value)}
+                            style={{width:'auto',padding:'0 12px',border:'1.5px solid #ddd',borderRadius:10,fontSize:13,background:'white'}}>
+                            <option value="artist_title">Artist + Title</option>
+                            <option value="artist_year">Artist + Year</option>
+                          </select>
+                        </div>
+                      )}
                       {collectionRaw.length > 0 && (
                         <div className="filters">
                           <MultiSelect options={collOpts.formats.filter(f => !['12"','7"','10"','LP'].includes(f))} selected={collFilter.formats} onChange={v => { setCollFilter(f => ({...f, formats: v})); setPage(1); }} placeholder="Format..." />
