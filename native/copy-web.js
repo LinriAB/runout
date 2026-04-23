@@ -6,7 +6,7 @@ const path = require('path');
 const src = path.resolve(__dirname, '..');
 const dst = path.resolve(__dirname, 'www');
 
-const include = ['index.html', 'sw.js', 'manifest.json', 'privacy.html', 'icon-192.png', 'icon-512.png'];
+const include = ['index.html', 'sw.js', 'manifest.json', 'privacy.html', 'changes.html', 'icon-192.png', 'icon-512.png'];
 
 fs.mkdirSync(dst, { recursive: true });
 

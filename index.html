@@ -499,11 +499,14 @@
       <p><a href="https://runout.io">Learn more about RunOut</a></p>
     </div>
   </noscript>
-  <div class="app-footer">&copy; 2026 <a href="https://runout.io">runout.io</a> · <a href="./privacy.html">Privacy</a> · <a href="mailto:rickard@engberg.io">rickard@engberg.io</a></div>
+  <div class="app-footer">&copy; 2026 <a href="https://runout.io">runout.io</a> · <a href="./privacy.html">Privacy</a> · <a href="#changes">Changes</a> · <a href="mailto:rickard@engberg.io">rickard@engberg.io</a></div>
   <script type="text/babel">
     const { useState, useEffect, useRef } = React;
 
     const API = "https://api.discogs.com";
+    // Bump this when you publish changes you want existing users to see.
+    // Keep in sync with CACHE_NAME in sw.js so cached assets update too.
+    const APP_VERSION = 'v29';
     // Backend for personal fields (purchase price, notes, tags). null = feature disabled.
     // Set this to your Worker URL, e.g. "https://runout-api.your-subdomain.workers.dev"
     // or "https://api.runout.io" once a custom route is live.
@@ -1422,6 +1425,38 @@
       const [hoverPreview, setHoverPreview] = useState(null);
       const previewRef = useRef(null);
       const [showToTop, setShowToTop] = useState(false);
+      const [showChanges, setShowChanges] = useState(false);
+      const [changesHtml, setChangesHtml] = useState(null);
+
+      // Show changes popup when the installed version differs from the last seen one.
+      // First-time visitors don't see it; they just get their current version saved.
+      useEffect(() => {
+        const seen = localStorage.getItem('runout_seen_version');
+        if (seen && seen !== APP_VERSION) setShowChanges(true);
+        localStorage.setItem('runout_seen_version', APP_VERSION);
+      }, []);
+
+      // Also allow opening via #changes hash (footer link)
+      useEffect(() => {
+        const openIfHash = () => {
+          if (window.location.hash === '#changes') {
+            setShowChanges(true);
+            history.replaceState(null, '', window.location.pathname + window.location.search);
+          }
+        };
+        window.addEventListener('hashchange', openIfHash);
+        openIfHash();
+        return () => window.removeEventListener('hashchange', openIfHash);
+      }, []);
+
+      // Lazy-load changes.html when modal opens for the first time
+      useEffect(() => {
+        if (!showChanges || changesHtml !== null) return;
+        fetch('./changes.html', { cache: 'no-store' })
+          .then(r => r.ok ? r.text() : '<p>Could not load changelog.</p>')
+          .then(setChangesHtml)
+          .catch(() => setChangesHtml('<p>Could not load changelog.</p>'));
+      }, [showChanges, changesHtml]);
 
       useEffect(() => {
         const isDesktop = window.matchMedia('(min-width: 960px)').matches;
@@ -2415,6 +2450,18 @@
           )}
           {showToTop && (
             <button className="to-top" onClick={scrollToTop} aria-label="Scroll to top" title="Scroll to top">↑</button>
+          )}
+          {showChanges && (
+            <div className="modal-backdrop" onClick={() => setShowChanges(false)}>
+              <div className="modal" onClick={e => e.stopPropagation()}>
+                <button className="modal-close" onClick={() => setShowChanges(false)} aria-label="Close">×</button>
+                <div className="modal-body">
+                  {changesHtml === null
+                    ? <div className="empty-state"><div className="spinner" style={{width:20,height:20}}></div></div>
+                    : <div dangerouslySetInnerHTML={{__html: changesHtml}} />}
+                </div>
+              </div>
+            </div>
           )}
           {modalItem && (() => {
             const info = modalItem.basic_information;
