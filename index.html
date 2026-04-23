@@ -507,7 +507,7 @@
     // Backend for personal fields (purchase price, notes, tags). null = feature disabled.
     // Set this to your Worker URL, e.g. "https://runout-api.your-subdomain.workers.dev"
     // or "https://api.runout.io" once a custom route is live.
-    const BACKEND_API = null;
+    const BACKEND_API = "https://runout-api.rickard-engberg.workers.dev";
     const IS_NATIVE = typeof window !== 'undefined' && !!(window.Capacitor && window.Capacitor.isNativePlatform && window.Capacitor.isNativePlatform());
 
     async function scanBarcode() {
@@ -845,6 +845,71 @@
       });
     }
 
+    // ==================== PersonalFieldsForm ====================
+    function PersonalFieldsForm({ releaseId, personal, onSave, onDelete }) {
+      const [price, setPrice] = useState(personal?.price ?? '');
+      const [currency, setCurrency] = useState(personal?.currency ?? 'SEK');
+      const [notes, setNotes] = useState(personal?.notes ?? '');
+      const [tags, setTags] = useState((personal?.tags || []).join(', '));
+      const [saving, setSaving] = useState(false);
+      useEffect(() => {
+        setPrice(personal?.price ?? '');
+        setCurrency(personal?.currency ?? 'SEK');
+        setNotes(personal?.notes ?? '');
+        setTags((personal?.tags || []).join(', '));
+      }, [personal?.updated_at, releaseId]);
+
+      const handleSave = async () => {
+        setSaving(true);
+        try {
+          const payload = {};
+          if (price !== '') payload.price = Number(price);
+          if (currency.trim()) payload.currency = currency.trim();
+          if (notes.trim()) payload.notes = notes.trim();
+          const parsed = tags.split(',').map(s => s.trim()).filter(Boolean);
+          if (parsed.length) payload.tags = parsed;
+          await onSave(releaseId, payload);
+        } catch (e) { alert('Save failed: ' + e.message); }
+        setSaving(false);
+      };
+      const handleDelete = async () => {
+        if (!confirm('Delete personal fields for this release?')) return;
+        try { await onDelete(releaseId); } catch (e) { alert('Delete failed: ' + e.message); }
+      };
+
+      return (
+        <div className="add-form" style={{borderTop:0}}>
+          <div className="add-form-grid">
+            <div className="field">
+              <label>Purchase price</label>
+              <input type="number" step="0.01" value={price} onChange={e=>setPrice(e.target.value)} placeholder="0.00" style={{fontSize:13,padding:'8px 10px'}} />
+            </div>
+            <div className="field">
+              <label>Currency</label>
+              <input type="text" value={currency} onChange={e=>setCurrency(e.target.value.toUpperCase().slice(0,4))} placeholder="SEK" style={{fontSize:13,padding:'8px 10px'}} />
+            </div>
+          </div>
+          <div className="add-form-full">
+            <label>Tags (comma-separated)</label>
+            <input type="text" value={tags} onChange={e=>setTags(e.target.value)} placeholder="favourite, loan to alex" style={{fontSize:13,padding:'8px 10px'}} />
+          </div>
+          <div className="add-form-full">
+            <label>Personal notes</label>
+            <textarea value={notes} onChange={e=>setNotes(e.target.value)} rows="2" placeholder="Anything you want to remember about this copy..." style={{fontSize:13}} />
+          </div>
+          <div className="add-form-actions">
+            <button className="btn-confirm" disabled={saving} onClick={handleSave}>{saving ? 'Saving...' : 'Save'}</button>
+            {personal && <button className="btn-cancel" onClick={handleDelete}>Delete</button>}
+          </div>
+          {personal?.updated_at && (
+            <div style={{fontSize:11,color:'#999',marginTop:6}}>
+              Last updated {new Date(personal.updated_at).toLocaleString()}
+            </div>
+          )}
+        </div>
+      );
+    }
+
     // ==================== MultiSelect ====================
     function MultiSelect({ options, selected, onChange, placeholder, renderOption }) {
       const [open, setOpen] = useState(false);
@@ -916,17 +981,6 @@
       const [marketData, setMarketData] = useState(null);
       const [marketLoading, setMarketLoading] = useState(false);
       const [showPersonal, setShowPersonal] = useState(false);
-      const [pPrice, setPPrice] = useState(personal?.price ?? '');
-      const [pCurrency, setPCurrency] = useState(personal?.currency ?? 'SEK');
-      const [pNotes, setPNotes] = useState(personal?.notes ?? '');
-      const [pTags, setPTags] = useState((personal?.tags || []).join(', '));
-      const [pSaving, setPSaving] = useState(false);
-      useEffect(() => {
-        setPPrice(personal?.price ?? '');
-        setPCurrency(personal?.currency ?? 'SEK');
-        setPNotes(personal?.notes ?? '');
-        setPTags((personal?.tags || []).join(', '));
-      }, [personal?.updated_at]);
       const images = releaseDetails?.images || null;
       const imgLoading = detailsLoading && showGallery;
 
@@ -1202,52 +1256,7 @@
             </button>
           )}
           {showPersonal && BACKEND_API && (
-            <div className="add-form" style={{borderTop:0}}>
-              <div className="add-form-grid">
-                <div className="field">
-                  <label>Purchase price</label>
-                  <input type="number" step="0.01" value={pPrice} onChange={e=>setPPrice(e.target.value)} placeholder="0.00" style={{fontSize:13,padding:'8px 10px'}} />
-                </div>
-                <div className="field">
-                  <label>Currency</label>
-                  <input type="text" value={pCurrency} onChange={e=>setPCurrency(e.target.value.toUpperCase().slice(0,4))} placeholder="SEK" style={{fontSize:13,padding:'8px 10px'}} />
-                </div>
-              </div>
-              <div className="add-form-full">
-                <label>Tags (comma-separated)</label>
-                <input type="text" value={pTags} onChange={e=>setPTags(e.target.value)} placeholder="favourite, loan to alex" style={{fontSize:13,padding:'8px 10px'}} />
-              </div>
-              <div className="add-form-full">
-                <label>Personal notes</label>
-                <textarea value={pNotes} onChange={e=>setPNotes(e.target.value)} rows="2" placeholder="Anything you want to remember about this copy..." style={{fontSize:13}} />
-              </div>
-              <div className="add-form-actions">
-                <button className="btn-confirm" disabled={pSaving} onClick={async () => {
-                  setPSaving(true);
-                  try {
-                    const payload = {};
-                    if (pPrice !== '') payload.price = Number(pPrice);
-                    if (pCurrency.trim()) payload.currency = pCurrency.trim();
-                    if (pNotes.trim()) payload.notes = pNotes.trim();
-                    const tags = pTags.split(',').map(s => s.trim()).filter(Boolean);
-                    if (tags.length) payload.tags = tags;
-                    await onSavePersonal(r.id, payload);
-                  } catch (e) { alert('Save failed: ' + e.message); }
-                  setPSaving(false);
-                }}>{pSaving ? 'Saving...' : 'Save'}</button>
-                {personal && (
-                  <button className="btn-cancel" onClick={async () => {
-                    if (!confirm('Delete personal fields for this release?')) return;
-                    try { await onDeletePersonal(r.id); } catch (e) { alert('Delete failed: ' + e.message); }
-                  }}>Delete</button>
-                )}
-              </div>
-              {personal?.updated_at && (
-                <div style={{fontSize:11,color:'#999',marginTop:6}}>
-                  Last updated {new Date(personal.updated_at).toLocaleString()}
-                </div>
-              )}
-            </div>
+            <PersonalFieldsForm releaseId={r.id} personal={personal} onSave={onSavePersonal} onDelete={onDeletePersonal} />
           )}
 
           {showForm && !isOwned && (
@@ -2446,6 +2455,12 @@
                       )}
                     </div>
                     <a className="modal-link" href={`https://www.discogs.com/release/${info.id}`} target="_blank" rel="noopener">View on Discogs ↗</a>
+                    {BACKEND_API && (
+                      <div className="modal-section">
+                        <div className="modal-section-label">My notes &amp; price {personalFields[info.id] ? '✓' : ''}</div>
+                        <PersonalFieldsForm releaseId={info.id} personal={personalFields[info.id]} onSave={savePersonal} onDelete={deletePersonal} />
+                      </div>
+                    )}
                   </div>
                 </div>
               </div>

@@ -4,7 +4,7 @@ compatibility_date = "2026-04-01"
 
 [vars]
 # Tighten this once the custom domain is live. Use "*" during local dev only.
-ALLOWED_ORIGIN = "https://app.runout.io"
+ALLOWED_ORIGIN = "*"
 DISCOGS_USER_AGENT = "RunOutBackend/1.0 +https://runout.io"
 
 # D1 database binding. Fill database_id after `wrangler d1 create runout_personal_fields`.
