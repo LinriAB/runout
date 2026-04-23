@@ -340,6 +340,17 @@
     }
     .app-footer a { color: #999; text-decoration: none; }
 
+    .to-top {
+      position: fixed; right: 20px; bottom: 40px; z-index: 150;
+      width: 44px; height: 44px; border-radius: 50%;
+      background: #4f46e5; color: white; border: none;
+      box-shadow: 0 6px 16px rgba(0,0,0,0.2);
+      cursor: pointer; font-size: 20px; line-height: 1;
+      display: flex; align-items: center; justify-content: center;
+      transition: opacity 0.15s, transform 0.15s;
+    }
+    .to-top:hover { transform: translateY(-2px); }
+
     .coll-meta { font-size: 11px; color: #aaa; margin-top: 4px; }
 
     /* Browse grid (Collection grid view) */
@@ -759,9 +770,12 @@
 
     function filterCollectionItem(item, filters) {
       const info = item.basic_information;
-      if (filters.formats?.length) {
-        const fmts = (info.formats || []).flatMap(f => [f.name, ...(f.descriptions || [])]);
-        if (!fmts.some(f => filters.formats.includes(f))) return false;
+      const fmts = (info.formats || []).flatMap(f => [f.name, ...(f.descriptions || [])]);
+      if (filters.formats?.length && !fmts.some(f => filters.formats.includes(f))) return false;
+      if (filters.sizes?.length) {
+        const sizes = ['12"', '7"', '10"'];
+        const hasAnySize = fmts.some(f => sizes.some(s => f.includes(s)));
+        if (hasAnySize && !fmts.some(f => filters.sizes.some(s => f.includes(s)))) return false;
       }
       if (filters.years?.length && !filters.years.includes(String(info.year))) return false;
       if (filters.labels?.length && !(info.labels || []).some(l => filters.labels.includes(l.name))) return false;
@@ -1297,6 +1311,24 @@
       const imagesAbort = useRef(false);
       const [hoverPreview, setHoverPreview] = useState(null);
       const previewRef = useRef(null);
+      const [showToTop, setShowToTop] = useState(false);
+
+      useEffect(() => {
+        const isDesktop = window.matchMedia('(min-width: 960px)').matches;
+        const target = isDesktop ? mainRef.current : window;
+        if (!target) return;
+        const getScroll = () => isDesktop ? (mainRef.current ? mainRef.current.scrollTop : 0) : window.scrollY;
+        const check = () => setShowToTop(getScroll() > window.innerHeight * 0.8);
+        target.addEventListener('scroll', check, { passive: true });
+        check();
+        return () => target.removeEventListener('scroll', check);
+      }, [activeView]);
+
+      const scrollToTop = () => {
+        const isDesktop = window.matchMedia('(min-width: 960px)').matches;
+        if (isDesktop && mainRef.current) mainRef.current.scrollTo({ top: 0, behavior: 'smooth' });
+        else window.scrollTo({ top: 0, behavior: 'smooth' });
+      };
 
       const movePreview = (e) => {
         if (!previewRef.current) return;
@@ -1311,8 +1343,8 @@
       };
 
       // Collection/Wantlist filters
-      const [collFilter, setCollFilter] = useState({ formats: [], years: [], labels: [], folders: [] });
-      const [wantFilter, setWantFilter] = useState({ formats: [], years: [], labels: [] });
+      const [collFilter, setCollFilter] = useState({ formats: [], sizes: [], years: [], labels: [], folders: [] });
+      const [wantFilter, setWantFilter] = useState({ formats: [], sizes: [], years: [], labels: [] });
       const [collSearch, setCollSearch] = useState('');
       const [collSort, setCollSort] = useState('artist_title');
       const [collLayout, setCollLayout] = useState('list');
@@ -1342,15 +1374,28 @@
       const BATCH_LIST = 40;
       const BATCH_GRID = 80;
 
-      // Reset infinite scroll when filters/sort/layout/search/view changes
-      useEffect(() => {
-        setCollShown(collLayout === 'grid' ? BATCH_GRID : BATCH_LIST);
-        if (mainRef.current) mainRef.current.scrollTop = 0;
-      }, [activeView, collLayout, collSearch, collSort, JSON.stringify(collFilter)]);
+      // Track filter keys so we can reset infinite scroll synchronously at render time
+      // (useEffect resets after render, which would briefly render the old slice count).
+      const collKey = `${activeView}|${collLayout}|${collSearch}|${collSort}|${JSON.stringify(collFilter)}`;
+      const wantKey = `${activeView}|${JSON.stringify(wantFilter)}`;
+      const prevCollKeyRef = useRef(collKey);
+      const prevWantKeyRef = useRef(wantKey);
+      const collReset = collLayout === 'grid' ? BATCH_GRID : BATCH_LIST;
+      const effectiveCollShown = prevCollKeyRef.current === collKey ? collShown : collReset;
+      const effectiveWantShown = prevWantKeyRef.current === wantKey ? wantShown : BATCH_LIST;
 
       useEffect(() => {
+        if (prevCollKeyRef.current === collKey) return;
+        prevCollKeyRef.current = collKey;
+        setCollShown(collReset);
+        if (mainRef.current) mainRef.current.scrollTop = 0;
+      }, [collKey]);
+
+      useEffect(() => {
+        if (prevWantKeyRef.current === wantKey) return;
+        prevWantKeyRef.current = wantKey;
         setWantShown(BATCH_LIST);
-      }, [activeView, JSON.stringify(wantFilter)]);
+      }, [wantKey]);
 
       // Infinite scroll observer for Collection
       useEffect(() => {
@@ -1769,9 +1814,9 @@
           return aStr.localeCompare(bStr);
         });
         const collOpts = extractCollectionFilterOptions(collectionRaw);
-        const collSlice = collSorted.slice(0, Math.min(collShown, collSorted.length));
+        const collSlice = collSorted.slice(0, Math.min(effectiveCollShown, collSorted.length));
         const hasMore = collSlice.length < collSorted.length;
-        const hasCollFilter = collFilter.formats.length || collFilter.years.length || collFilter.labels.length || collFilter.folders.length || q;
+        const hasCollFilter = collFilter.formats.length || collFilter.sizes.length || collFilter.years.length || collFilter.labels.length || collFilter.folders.length || q;
         const folderOptsColl = folders.map(f => String(f.id));
         const folderLabelColl = (id) => { const f = folders.find(x => String(x.id) === id); return f ? `${f.name} (${f.count})` : id; };
         return { collSorted, collOpts, collSlice, hasMore, hasCollFilter, folderOptsColl, folderLabelColl };
@@ -1787,9 +1832,9 @@
           return aStr.localeCompare(bStr);
         });
         const wantOpts = extractCollectionFilterOptions(wantlistRaw);
-        const wantSlice = wantSorted.slice(0, Math.min(wantShown, wantSorted.length));
+        const wantSlice = wantSorted.slice(0, Math.min(effectiveWantShown, wantSorted.length));
         const hasMore = wantSlice.length < wantSorted.length;
-        const hasWantFilter = wantFilter.formats.length || wantFilter.years.length || wantFilter.labels.length;
+        const hasWantFilter = wantFilter.formats.length || wantFilter.sizes.length || wantFilter.years.length || wantFilter.labels.length;
         return { wantSorted, wantOpts, wantSlice, hasMore, hasWantFilter };
       })() : null;
 
@@ -1801,7 +1846,11 @@
                 <h1>RunOut</h1>
                 <p>Search Discogs — fast & easy</p>
               </div>
-              {connected && <span className="header-badge">{collectionRaw.length} records</span>}
+              {connected && (
+                activeView === 'wantlist'
+                  ? <span className="header-badge">{wantlistRaw.length} wanted</span>
+                  : <span className="header-badge">{collectionRaw.length} records</span>
+              )}
             </div>
           </div>
           <div className="container">
@@ -1850,8 +1899,8 @@
                   {/* View navigation */}
                   <div className="view-nav">
                     <button className={activeView==='search' ? 'active' : ''} onClick={()=>{setActiveView('search');setPage(1);}}>Search</button>
-                    <button className={activeView==='collection' ? 'active' : ''} onClick={()=>{setActiveView('collection');setPage(1);}}>Collection ({collectionRaw.length})</button>
-                    <button className={activeView==='wantlist' ? 'active' : ''} onClick={()=>{setActiveView('wantlist');setPage(1);}}>Wantlist ({wantlistRaw.length})</button>
+                    <button className={activeView==='collection' ? 'active' : ''} onClick={()=>{setActiveView('collection');setPage(1);}}>Collection</button>
+                    <button className={activeView==='wantlist' ? 'active' : ''} onClick={()=>{setActiveView('wantlist');setPage(1);}}>Wantlist</button>
                   </div>
 
                   {/* Search view: sidebar controls */}
@@ -1927,11 +1976,12 @@
                         </select>
                       </div>
                       <div className="filters">
-                        <MultiSelect options={collView.collOpts.formats.filter(f => !['12"','7"','10"','LP'].includes(f))} selected={collFilter.formats} onChange={v => { setCollFilter(f => ({...f, formats: v})); setPage(1); }} placeholder="Format..." />
-                        <MultiSelect options={collView.collOpts.years} selected={collFilter.years} onChange={v => { setCollFilter(f => ({...f, years: v})); setPage(1); }} placeholder="Year..." />
-                        <MultiSelect options={collView.collOpts.labels} selected={collFilter.labels} onChange={v => { setCollFilter(f => ({...f, labels: v})); setPage(1); }} placeholder="Label..." />
+                        <MultiSelect options={collView.collOpts.formats.filter(f => !['12"','7"','10"','LP'].includes(f))} selected={collFilter.formats} onChange={v => setCollFilter(f => ({...f, formats: v}))} placeholder="Format..." />
+                        <MultiSelect options={['12"','7"','10"']} selected={collFilter.sizes} onChange={v => setCollFilter(f => ({...f, sizes: v}))} placeholder="Size..." />
+                        <MultiSelect options={collView.collOpts.years} selected={collFilter.years} onChange={v => setCollFilter(f => ({...f, years: v}))} placeholder="Year..." />
+                        <MultiSelect options={collView.collOpts.labels} selected={collFilter.labels} onChange={v => setCollFilter(f => ({...f, labels: v}))} placeholder="Label..." />
                         {folders.length > 0 && (
-                          <MultiSelect options={collView.folderOptsColl} selected={collFilter.folders} onChange={v => { setCollFilter(f => ({...f, folders: v})); setPage(1); }} placeholder="Folder..." renderOption={collView.folderLabelColl} />
+                          <MultiSelect options={collView.folderOptsColl} selected={collFilter.folders} onChange={v => setCollFilter(f => ({...f, folders: v}))} placeholder="Folder..." renderOption={collView.folderLabelColl} />
                         )}
                       </div>
                     </>
@@ -1940,9 +1990,10 @@
                   {/* Wantlist view: sidebar controls */}
                   {activeView === 'wantlist' && wantView && wantlistRaw.length > 0 && (
                     <div className="filters">
-                      <MultiSelect options={wantView.wantOpts.formats.filter(f => !['12"','7"','10"','LP'].includes(f))} selected={wantFilter.formats} onChange={v => { setWantFilter(f => ({...f, formats: v})); setPage(1); }} placeholder="Format..." />
-                      <MultiSelect options={wantView.wantOpts.years} selected={wantFilter.years} onChange={v => { setWantFilter(f => ({...f, years: v})); setPage(1); }} placeholder="Year..." />
-                      <MultiSelect options={wantView.wantOpts.labels} selected={wantFilter.labels} onChange={v => { setWantFilter(f => ({...f, labels: v})); setPage(1); }} placeholder="Label..." />
+                      <MultiSelect options={wantView.wantOpts.formats.filter(f => !['12"','7"','10"','LP'].includes(f))} selected={wantFilter.formats} onChange={v => setWantFilter(f => ({...f, formats: v}))} placeholder="Format..." />
+                      <MultiSelect options={['12"','7"','10"']} selected={wantFilter.sizes} onChange={v => setWantFilter(f => ({...f, sizes: v}))} placeholder="Size..." />
+                      <MultiSelect options={wantView.wantOpts.years} selected={wantFilter.years} onChange={v => setWantFilter(f => ({...f, years: v}))} placeholder="Year..." />
+                      <MultiSelect options={wantView.wantOpts.labels} selected={wantFilter.labels} onChange={v => setWantFilter(f => ({...f, labels: v}))} placeholder="Label..." />
                     </div>
                   )}
                 </>
@@ -2129,7 +2180,7 @@
                 <>
                   {collectionRaw.length > 0 && (
                     <div className="results-header">
-                      <div className="hit-count">Showing {collView.collSlice.length} of {collView.hasCollFilter ? `${collView.collSorted.length} (${collectionRaw.length} total)` : collectionRaw.length} releases</div>
+                      <div className="hit-count">{collView.hasCollFilter ? `${collView.collSorted.length} matching releases` : ''}</div>
                       <div className="layout-toggle">
                         <button className={collLayout==='list' ? 'active' : ''} onClick={() => setCollLayout('list')}>List</button>
                         <button className={collLayout==='grid' ? 'active' : ''} onClick={() => setCollLayout('grid')}>Grid</button>
@@ -2180,8 +2231,8 @@
 
               {connected && activeView === 'wantlist' && wantView && (
                 <>
-                  {wantlistRaw.length > 0 && (
-                    <div className="hit-count">Showing {wantView.wantSlice.length} of {wantView.hasWantFilter ? `${wantView.wantSorted.length} (${wantlistRaw.length} total)` : wantlistRaw.length} releases</div>
+                  {wantlistRaw.length > 0 && wantView.hasWantFilter && (
+                    <div className="hit-count">{wantView.wantSorted.length} matching releases</div>
                   )}
                   <div className="result-grid">
                     {wantView.wantSlice.map(w => {
@@ -2226,6 +2277,9 @@
             <div ref={previewRef} className="thumb-preview" style={{left: hoverPreview.x + 24, top: hoverPreview.y + 24}}>
               <img src={hoverPreview.uri} alt="" />
             </div>
+          )}
+          {showToTop && (
+            <button className="to-top" onClick={scrollToTop} aria-label="Scroll to top" title="Scroll to top">↑</button>
           )}
           {modalItem && (() => {
             const info = modalItem.basic_information;
