@@ -20,8 +20,10 @@ build/
 
 # Capacitor / Native
 native/node_modules/
+native/www/
 native/android/.gradle/
 native/android/app/build/
+native/android/app/release/
 native/android/build/
 native/android/.idea/
 native/android/local.properties
@@ -30,10 +32,17 @@ native/ios/App/build/
 native/ios/App/App.xcworkspace/xcuserdata/
 *.xcuserstate
 
+# Signing keys (keystore + config)
+keys/
+*.keystore
+*.jks
+native/android/key.properties
+
+# Backend (Cloudflare Worker)
+backend/node_modules/
+backend/.wrangler/
+backend/.dev.vars
+
 # Environment / secrets
 .env
 .env.local
-
-keys/
-
-native/android/key.properties
