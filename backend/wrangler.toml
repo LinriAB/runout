@@ -1,0 +1,19 @@
+name = "runout-api"
+main = "worker.js"
+compatibility_date = "2026-04-01"
+
+[vars]
+# Tighten this once the custom domain is live. Use "*" during local dev only.
+ALLOWED_ORIGIN = "https://app.runout.io"
+DISCOGS_USER_AGENT = "RunOutBackend/1.0 +https://runout.io"
+
+# D1 database binding. Fill database_id after `wrangler d1 create runout_personal_fields`.
+[[d1_databases]]
+binding = "DB"
+database_name = "runout_personal_fields"
+database_id = "4a42b2b9-66f2-4734-aea0-63f8eb9ffa32"
+
+# ENC_KEY is a secret, not a var. Set it with:
+#   wrangler secret put ENC_KEY
+# Generate one with:
+#   node -e "console.log(require('crypto').randomBytes(32).toString('hex'))"

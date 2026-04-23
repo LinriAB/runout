@@ -504,6 +504,10 @@
     const { useState, useEffect, useRef } = React;
 
     const API = "https://api.discogs.com";
+    // Backend for personal fields (purchase price, notes, tags). null = feature disabled.
+    // Set this to your Worker URL, e.g. "https://runout-api.your-subdomain.workers.dev"
+    // or "https://api.runout.io" once a custom route is live.
+    const BACKEND_API = null;
     const IS_NATIVE = typeof window !== 'undefined' && !!(window.Capacitor && window.Capacitor.isNativePlatform && window.Capacitor.isNativePlatform());
 
     async function scanBarcode() {
@@ -672,6 +676,36 @@
       const d = await dGet('/oauth/identity', token);
       if (!d.username) throw new Error('Could not fetch Discogs identity');
       return d;
+    }
+
+    // ---- Backend (personal fields) ----
+    async function backendGet(path, token) {
+      if (!BACKEND_API) return null;
+      const r = await fetch(`${BACKEND_API}${path}`, {
+        headers: { 'Authorization': `Discogs-Token ${token}` },
+      });
+      if (r.status === 404) return null;
+      if (!r.ok) throw new Error(`${r.status} ${r.statusText}`);
+      return r.json();
+    }
+    async function backendPut(path, token, body) {
+      if (!BACKEND_API) return null;
+      const r = await fetch(`${BACKEND_API}${path}`, {
+        method: 'PUT',
+        headers: { 'Authorization': `Discogs-Token ${token}`, 'Content-Type': 'application/json' },
+        body: JSON.stringify(body),
+      });
+      if (!r.ok) throw new Error(`${r.status} ${r.statusText}`);
+      return r.json();
+    }
+    async function backendDelete(path, token) {
+      if (!BACKEND_API) return null;
+      const r = await fetch(`${BACKEND_API}${path}`, {
+        method: 'DELETE',
+        headers: { 'Authorization': `Discogs-Token ${token}` },
+      });
+      if (!r.ok && r.status !== 204) throw new Error(`${r.status} ${r.statusText}`);
+      return r.json().catch(() => ({}));
     }
 
     async function loadCollectionFromAPI(user, token, cb) {
@@ -861,7 +895,7 @@
     }
 
     // ==================== ResultCard ====================
-    function ResultCard({ r, owned, wanted, hideOwned, collectionInstance, token, username, folders, fields, defaultFolder, defaultMedia, onAdded, onRemoved, onWanted, onUnwanted, onPrefsUpdate, onSearchText, onSearchCatno, onClose, activeSizeFilters }) {
+    function ResultCard({ r, owned, wanted, hideOwned, collectionInstance, token, username, folders, fields, defaultFolder, defaultMedia, onAdded, onRemoved, onWanted, onUnwanted, onPrefsUpdate, onSearchText, onSearchCatno, onClose, activeSizeFilters, personal, onSavePersonal, onDeletePersonal }) {
       const [showForm, setShowForm] = useState(false);
       const [adding, setAdding] = useState(false);
       const [added, setAdded] = useState(false);
@@ -881,6 +915,18 @@
       const [showMarket, setShowMarket] = useState(false);
       const [marketData, setMarketData] = useState(null);
       const [marketLoading, setMarketLoading] = useState(false);
+      const [showPersonal, setShowPersonal] = useState(false);
+      const [pPrice, setPPrice] = useState(personal?.price ?? '');
+      const [pCurrency, setPCurrency] = useState(personal?.currency ?? 'SEK');
+      const [pNotes, setPNotes] = useState(personal?.notes ?? '');
+      const [pTags, setPTags] = useState((personal?.tags || []).join(', '));
+      const [pSaving, setPSaving] = useState(false);
+      useEffect(() => {
+        setPPrice(personal?.price ?? '');
+        setPCurrency(personal?.currency ?? 'SEK');
+        setPNotes(personal?.notes ?? '');
+        setPTags((personal?.tags || []).join(', '));
+      }, [personal?.updated_at]);
       const images = releaseDetails?.images || null;
       const imgLoading = detailsLoading && showGallery;
 
@@ -1150,6 +1196,60 @@
             </div>
           )}
 
+          {BACKEND_API && onSavePersonal && (
+            <button className="gallery-toggle" onClick={() => setShowPersonal(s => !s)}>
+              {showPersonal ? '▾ Hide my notes & price' : (personal ? '▸ My notes & price ✓' : '▸ My notes & price')}
+            </button>
+          )}
+          {showPersonal && BACKEND_API && (
+            <div className="add-form" style={{borderTop:0}}>
+              <div className="add-form-grid">
+                <div className="field">
+                  <label>Purchase price</label>
+                  <input type="number" step="0.01" value={pPrice} onChange={e=>setPPrice(e.target.value)} placeholder="0.00" style={{fontSize:13,padding:'8px 10px'}} />
+                </div>
+                <div className="field">
+                  <label>Currency</label>
+                  <input type="text" value={pCurrency} onChange={e=>setPCurrency(e.target.value.toUpperCase().slice(0,4))} placeholder="SEK" style={{fontSize:13,padding:'8px 10px'}} />
+                </div>
+              </div>
+              <div className="add-form-full">
+                <label>Tags (comma-separated)</label>
+                <input type="text" value={pTags} onChange={e=>setPTags(e.target.value)} placeholder="favourite, loan to alex" style={{fontSize:13,padding:'8px 10px'}} />
+              </div>
+              <div className="add-form-full">
+                <label>Personal notes</label>
+                <textarea value={pNotes} onChange={e=>setPNotes(e.target.value)} rows="2" placeholder="Anything you want to remember about this copy..." style={{fontSize:13}} />
+              </div>
+              <div className="add-form-actions">
+                <button className="btn-confirm" disabled={pSaving} onClick={async () => {
+                  setPSaving(true);
+                  try {
+                    const payload = {};
+                    if (pPrice !== '') payload.price = Number(pPrice);
+                    if (pCurrency.trim()) payload.currency = pCurrency.trim();
+                    if (pNotes.trim()) payload.notes = pNotes.trim();
+                    const tags = pTags.split(',').map(s => s.trim()).filter(Boolean);
+                    if (tags.length) payload.tags = tags;
+                    await onSavePersonal(r.id, payload);
+                  } catch (e) { alert('Save failed: ' + e.message); }
+                  setPSaving(false);
+                }}>{pSaving ? 'Saving...' : 'Save'}</button>
+                {personal && (
+                  <button className="btn-cancel" onClick={async () => {
+                    if (!confirm('Delete personal fields for this release?')) return;
+                    try { await onDeletePersonal(r.id); } catch (e) { alert('Delete failed: ' + e.message); }
+                  }}>Delete</button>
+                )}
+              </div>
+              {personal?.updated_at && (
+                <div style={{fontSize:11,color:'#999',marginTop:6}}>
+                  Last updated {new Date(personal.updated_at).toLocaleString()}
+                </div>
+              )}
+            </div>
+          )}
+
           {showForm && !isOwned && (
             <div className="add-form">
               <div className="add-form-grid">
@@ -1278,6 +1378,7 @@
       const [folders, setFolders] = useState([]);
       const [fields, setFields] = useState([]);
       const [cacheInfo, setCacheInfo] = useState(null);
+      const [personalFields, setPersonalFields] = useState({});  // { [releaseId]: { price, notes, tags, ... } }
       const [wantlistIds, setWantlistIds] = useState(new Set());
       const [wantlistRaw, setWantlistRaw] = useState([]);
       const [activeView, setActiveView] = useState('search');
@@ -1472,6 +1573,13 @@
           }
           setWantlistRaw(wantItems);
           setWantlistIds(new Set(wantItems.map(w => w.id)));
+          // Personal fields (optional backend feature)
+          if (BACKEND_API) {
+            try {
+              const fields = await backendGet('/api/fields', tk);
+              if (fields) setPersonalFields(fields);
+            } catch (e) { console.warn('Personal fields unavailable:', e.message); }
+          }
           setConnected(true);
           setSettingsOpen(false);
           saveSettings(tk, un);
@@ -1485,7 +1593,7 @@
         setConnected(false); setCollectionRaw([]); setCollectionIds(new Set());
         setWantlistIds(new Set()); setWantlistRaw([]);
         setFolders([]); setFields([]); setToken(''); setUsername('');
-        setCacheInfo(null); clearActiveSession(); setSettingsOpen(true);
+        setCacheInfo(null); setPersonalFields({}); clearActiveSession(); setSettingsOpen(true);
         // Reset search state to prevent stale data on reconnect
         setApiResults([]); setLocalResults([]); setHasSearched(false);
         setSearching(false); setError(''); setPagination(null); setPage(1);
@@ -1730,6 +1838,19 @@
       const onUnwanted = (id) => {
         setWantlistIds(prev => { const s = new Set(prev); s.delete(id); return s; });
         setWantlistRaw(prev => prev.filter(w => w.basic_information?.id !== id && w.id !== id));
+      };
+
+      const savePersonal = async (releaseId, data) => {
+        if (!BACKEND_API) return;
+        const res = await backendPut(`/api/fields/${releaseId}`, token, data);
+        setPersonalFields(prev => ({ ...prev, [releaseId]: { ...data, updated_at: res.updated_at } }));
+      };
+      const deletePersonal = async (releaseId) => {
+        if (!BACKEND_API) return;
+        await backendDelete(`/api/fields/${releaseId}`, token);
+        setPersonalFields(prev => {
+          const next = { ...prev }; delete next[releaseId]; return next;
+        });
       };
 
       // Lookup: release id → collection instance (for removal)
@@ -2099,7 +2220,8 @@
                                           folders={folders} fields={fields} defaultFolder={lastFolder} defaultMedia={lastMedia}
                                           onAdded={onAdded} onRemoved={onRemoved} onWanted={onWanted} onUnwanted={onUnwanted}
                                           onPrefsUpdate={handlePrefsUpdate} onSearchText={handleSearchText} onSearchCatno={handleSearchCatno}
-                                          onClose={() => setExpandedThumbId(null)} activeSizeFilters={filterSizes} />
+                                          onClose={() => setExpandedThumbId(null)} activeSizeFilters={filterSizes}
+                                          personal={personalFields[t.release.id]} onSavePersonal={savePersonal} onDeletePersonal={deletePersonal} />
                                       </div>
                                     )}
                                   </React.Fragment>
@@ -2129,7 +2251,8 @@
                             {allOwnedApi.map(r => (
                               <ResultCard key={r.id} r={r} owned={true} wanted={wantlistIds.has(r.id)} collectionInstance={collectionMap[r.id]} token={token} username={username}
                                 folders={folders} fields={fields} defaultFolder={lastFolder} defaultMedia={lastMedia}
-                                onAdded={onAdded} onRemoved={onRemoved} onWanted={onWanted} onUnwanted={onUnwanted} onPrefsUpdate={handlePrefsUpdate} onSearchText={handleSearchText} onSearchCatno={handleSearchCatno} activeSizeFilters={filterSizes} />
+                                onAdded={onAdded} onRemoved={onRemoved} onWanted={onWanted} onUnwanted={onUnwanted} onPrefsUpdate={handlePrefsUpdate} onSearchText={handleSearchText} onSearchCatno={handleSearchCatno} activeSizeFilters={filterSizes}
+                                personal={personalFields[r.id]} onSavePersonal={savePersonal} onDeletePersonal={deletePersonal} />
                             ))}
                           </div>
                         </>
@@ -2148,7 +2271,8 @@
                             {apiNotOwned.map(r => (
                               <ResultCard key={r.id} r={r} owned={false} wanted={wantlistIds.has(r.id)} token={token} username={username}
                                 folders={folders} fields={fields} defaultFolder={lastFolder} defaultMedia={lastMedia}
-                                onAdded={onAdded} onRemoved={onRemoved} onWanted={onWanted} onUnwanted={onUnwanted} onPrefsUpdate={handlePrefsUpdate} onSearchText={handleSearchText} onSearchCatno={handleSearchCatno} activeSizeFilters={filterSizes} />
+                                onAdded={onAdded} onRemoved={onRemoved} onWanted={onWanted} onUnwanted={onUnwanted} onPrefsUpdate={handlePrefsUpdate} onSearchText={handleSearchText} onSearchCatno={handleSearchCatno} activeSizeFilters={filterSizes}
+                                personal={personalFields[r.id]} onSavePersonal={savePersonal} onDeletePersonal={deletePersonal} />
                             ))}
                           </div>
                         </>
@@ -2211,7 +2335,8 @@
                         return (
                           <ResultCard key={item.instance_id} r={r} owned={true} hideOwned={true} collectionInstance={item} wanted={wantlistIds.has(r.id)} token={token} username={username}
                             folders={folders} fields={fields} defaultFolder={lastFolder} defaultMedia={lastMedia}
-                            onAdded={onAdded} onRemoved={onRemoved} onWanted={onWanted} onUnwanted={onUnwanted} onPrefsUpdate={handlePrefsUpdate} onSearchText={handleSearchText} onSearchCatno={handleSearchCatno} />
+                            onAdded={onAdded} onRemoved={onRemoved} onWanted={onWanted} onUnwanted={onUnwanted} onPrefsUpdate={handlePrefsUpdate} onSearchText={handleSearchText} onSearchCatno={handleSearchCatno}
+                            personal={personalFields[r.id]} onSavePersonal={savePersonal} onDeletePersonal={deletePersonal} />
                         );
                       })}
                     </div>
@@ -2240,7 +2365,8 @@
                       return (
                         <ResultCard key={r.id} r={r} owned={collectionIds.has(r.id)} wanted={true} collectionInstance={collectionMap[r.id]} token={token} username={username}
                           folders={folders} fields={fields} defaultFolder={lastFolder} defaultMedia={lastMedia}
-                          onAdded={onAdded} onRemoved={onRemoved} onWanted={onWanted} onUnwanted={onUnwanted} onPrefsUpdate={handlePrefsUpdate} onSearchText={handleSearchText} onSearchCatno={handleSearchCatno} />
+                          onAdded={onAdded} onRemoved={onRemoved} onWanted={onWanted} onUnwanted={onUnwanted} onPrefsUpdate={handlePrefsUpdate} onSearchText={handleSearchText} onSearchCatno={handleSearchCatno}
+                          personal={personalFields[r.id]} onSavePersonal={savePersonal} onDeletePersonal={deletePersonal} />
                       );
                     })}
                   </div>
