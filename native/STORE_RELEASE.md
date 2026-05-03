@@ -163,6 +163,21 @@ must all match the table above.
 
 Microsoft Store review is typically 24–48 hours.
 
+### Published Windows versions log
+
+Microsoft Store burns a version number on first upload attempt — even rejected
+submissions block the same `Version` from being reused. Track every version
+that's been "consumed" so future releases pick a fresh number.
+
+| Version   | Date       | Status     | Notes                                             |
+|-----------|------------|------------|---------------------------------------------------|
+| 1.0.0.0   | 2026-04-20 | Published  | Initial "Run Out" release                         |
+| 1.0.1.0   | 2026-05-03 | Burnt      | Rejected (DisplayName mismatch with reservation)  |
+| 3.0.0.0   | 2026-05-03 | Submitted  | "RunOut for Discogs" rename + content sync to iOS |
+
+When adding a new row: any version strictly greater than the highest existing
+entry's version is safe to use.
+
 ---
 
 ## Release checklist
