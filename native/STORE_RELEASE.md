@@ -130,13 +130,35 @@ If 4.2 gets cited anyway, point to:
 
 No local build required — Microsoft's PWABuilder packages the live PWA.
 
+### Identifiers (must match exactly in PWABuilder form)
+
+These values are reserved against the existing app in Microsoft Partner Center.
+They MUST match across submissions; if any of them differs, the upload is
+treated as a brand-new app and existing users won't get the update.
+
+| Field in PWABuilder | Value |
+|---|---|
+| Package Identity Name | `LinriAB.vinyl-runout` |
+| Publisher | `CN=C47485DE-4A3F-435A-B7C4-FEE9EF3792F6` |
+| Publisher Display Name | `Linri AB` |
+| App / Display Name | `RunOut for Discogs` (also `Run Out` is reserved as a legacy alias on the same product) |
+| App version | bump per release; must be four-part and strictly higher than the previously accepted version (e.g. `3.0.0.0`) |
+| Classic version | a four-part version lower than App version (PWABuilder convention; e.g. `2.0.0.0`) |
+
+After regenerating, sanity-check by unzipping the `.msixbundle` and inspecting
+`AppxManifest.xml` — `Package/Identity/Name`, `Package/Identity/Publisher`,
+`Package/Properties/PublisherDisplayName`, and `Package/Properties/DisplayName`
+must all match the table above.
+
+### Workflow
+
 1. Go to [pwabuilder.com](https://www.pwabuilder.com/).
 2. Enter `https://app.runout.io` → analyse.
 3. Fix any reported manifest / service worker issues.
-4. **Package for Stores → Windows** → download the `.msixbundle` + classic
-   `.appxupload`.
+4. **Package for Stores → Windows** → fill in the identifiers above → download
+   the `.msixbundle` + classic `.appxupload`.
 5. In [Microsoft Partner Center](https://partner.microsoft.com/dashboard),
-   reserve the app name, create a new submission, upload the package, fill
+   create a new submission for the existing product, upload the package, fill
    listing, submit.
 
 Microsoft Store review is typically 24–48 hours.
