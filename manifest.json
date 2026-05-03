@@ -1,6 +1,6 @@
 {
   "name": "RunOut — Fast Discogs Search",
-  "short_name": "RunOut",
+  "short_name": "RunOut for Discogs",
   "description": "Search Discogs by catalog number, barcode, or text. See your collection, add releases instantly. Free PWA for record collectors.",
   "start_url": "./index.html",
   "display": "standalone",
