@@ -1,6 +1,6 @@
 {
   "name": "runout-native",
-  "version": "1.0.0",
+  "version": "3.0.0",
   "description": "RunOut — native app wrapper via Capacitor",
   "scripts": {
     "copy:web": "node copy-web.js",
