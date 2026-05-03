@@ -2,7 +2,7 @@ import type { CapacitorConfig } from '@capacitor/cli';
 
 const config: CapacitorConfig = {
   appId: 'se.linri.runout',
-  appName: 'RunOut',
+  appName: 'RunOut for Discogs',
   // Capacitor rejects parent paths, so we mirror the PWA into ./www via
   // `npm run copy:web` (automatically called before cap:sync).
   webDir: 'www',

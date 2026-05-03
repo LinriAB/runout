@@ -1,7 +1,7 @@
 <?xml version='1.0' encoding='utf-8'?>
 <resources>
-    <string name="app_name">RunOut</string>
-    <string name="title_activity_main">RunOut</string>
+    <string name="app_name">RunOut for Discogs</string>
+    <string name="title_activity_main">RunOut for Discogs</string>
     <string name="package_name">se.linri.runout</string>
     <string name="custom_url_scheme">se.linri.runout</string>
 </resources>
