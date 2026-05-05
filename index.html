@@ -762,7 +762,11 @@
     const IS_NATIVE = typeof window !== 'undefined' && !!(window.Capacitor && window.Capacitor.isNativePlatform && window.Capacitor.isNativePlatform());
     // Apple's review process rejects external donation/payment links (Guideline 3.1.1).
     // Mac Catalyst also reports 'ios' from getPlatform(), so this covers both targets.
-    const IS_IOS = typeof window !== 'undefined' && !!(window.Capacitor && window.Capacitor.getPlatform && window.Capacitor.getPlatform() === 'ios');
+    // Also detect iOS Safari (e.g. when app.runout.io is shown in an iframe on the website).
+    const IS_IOS = typeof window !== 'undefined' && (
+      !!(window.Capacitor && window.Capacitor.getPlatform && window.Capacitor.getPlatform() === 'ios') ||
+      (/iPad|iPhone|iPod/.test(navigator.userAgent) && !window.MSStream)
+    );
 
     async function scanBarcode() {
       const BS = window.Capacitor && window.Capacitor.Plugins && window.Capacitor.Plugins.BarcodeScanner;
