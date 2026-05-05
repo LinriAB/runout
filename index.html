@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no, viewport-fit=cover" />
   <meta name="apple-mobile-web-app-capable" content="yes" />
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
   <meta name="theme-color" content="#4f46e5" />
@@ -50,7 +50,7 @@
     * { margin: 0; padding: 0; box-sizing: border-box; }
     body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; background: #f5f5f7; color: #1d1d1f; -webkit-tap-highlight-color: transparent; }
 
-    .header { background: linear-gradient(135deg, #4f46e5, #6366f1); color: white; padding: 16px 20px; box-shadow: 0 2px 12px rgba(79,70,229,0.3); position: sticky; top: 0; z-index: 100; }
+    .header { background: linear-gradient(135deg, #4f46e5, #6366f1); color: white; padding: calc(16px + env(safe-area-inset-top)) 20px 16px; box-shadow: 0 2px 12px rgba(79,70,229,0.3); position: sticky; top: 0; z-index: 100; }
     .header h1 { font-size: 22px; font-weight: 700; letter-spacing: -0.5px; }
     .header-row { display: flex; justify-content: space-between; align-items: center; }
     .header p { font-size: 12px; opacity: 0.7; margin-top: 2px; }
@@ -902,12 +902,19 @@
     })();
 
     // ==================== API ====================
+    function checkResponse(r) {
+      if (r.ok) return;
+      if (r.status === 401) throw new Error('Your Discogs token appears to be invalid or expired. Please log out and re-enter your token.');
+      if (r.status === 429) throw new Error('Too many requests — Discogs rate limit reached. Please wait a moment and try again.');
+      throw new Error(`${r.status} ${r.statusText}`);
+    }
+
     async function dGet(path, token, params = {}) {
       const url = new URL(API + path);
       Object.entries(params).forEach(([k, v]) => { if (v) url.searchParams.set(k, String(v)); });
       url.searchParams.set("token", token);
       const r = await fetch(url);
-      if (!r.ok) throw new Error(`${r.status} ${r.statusText}`);
+      checkResponse(r);
       return r.json();
     }
     async function dPost(path, token, body) {
@@ -916,14 +923,14 @@
       const opts = { method: "POST" };
       if (body) { opts.headers = { 'Content-Type': 'application/json' }; opts.body = JSON.stringify(body); }
       const r = await fetch(url, opts);
-      if (!r.ok) throw new Error(`${r.status} ${r.statusText}`);
+      checkResponse(r);
       return r.json();
     }
     async function dPostField(path, token, value) {
       const url = new URL(API + path);
       url.searchParams.set("token", token);
       const r = await fetch(url, { method: "POST", headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ value }) });
-      if (!r.ok && r.status !== 204) throw new Error(`${r.status} ${r.statusText}`);
+      if (r.status !== 204) checkResponse(r);
     }
 
     async function fetchIdentity(token) {
@@ -939,7 +946,7 @@
         headers: { 'Authorization': `Discogs-Token ${token}` },
       });
       if (r.status === 404) return null;
-      if (!r.ok) throw new Error(`${r.status} ${r.statusText}`);
+      checkResponse(r);
       return r.json();
     }
     async function backendPut(path, token, body) {
@@ -949,7 +956,7 @@
         headers: { 'Authorization': `Discogs-Token ${token}`, 'Content-Type': 'application/json' },
         body: JSON.stringify(body),
       });
-      if (!r.ok) throw new Error(`${r.status} ${r.statusText}`);
+      checkResponse(r);
       return r.json();
     }
     async function backendDelete(path, token) {
@@ -958,7 +965,7 @@
         method: 'DELETE',
         headers: { 'Authorization': `Discogs-Token ${token}` },
       });
-      if (!r.ok && r.status !== 204) throw new Error(`${r.status} ${r.statusText}`);
+      if (r.status !== 204) checkResponse(r);
       return r.json().catch(() => ({}));
     }
 
