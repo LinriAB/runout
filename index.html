@@ -754,12 +754,15 @@
     const API = "https://api.discogs.com";
     // Bump this when you publish changes you want existing users to see.
     // Keep in sync with CACHE_NAME in sw.js so cached assets update too.
-    const APP_VERSION = 'v38';
+    const APP_VERSION = 'v40';
     // Backend for personal fields (purchase price, notes, tags). null = feature disabled.
     // Set this to your Worker URL, e.g. "https://runout-api.your-subdomain.workers.dev"
     // or "https://api.runout.io" once a custom route is live.
     const BACKEND_API = "https://runout-api.rickard-engberg.workers.dev";
     const IS_NATIVE = typeof window !== 'undefined' && !!(window.Capacitor && window.Capacitor.isNativePlatform && window.Capacitor.isNativePlatform());
+    // Apple's review process rejects external donation/payment links (Guideline 3.1.1).
+    // Mac Catalyst also reports 'ios' from getPlatform(), so this covers both targets.
+    const IS_IOS = typeof window !== 'undefined' && !!(window.Capacitor && window.Capacitor.getPlatform && window.Capacitor.getPlatform() === 'ios');
 
     async function scanBarcode() {
       const BS = window.Capacitor && window.Capacitor.Plugins && window.Capacitor.Plugins.BarcodeScanner;
@@ -2775,13 +2778,15 @@
               )}
             </main>
 
-            <div className="footer-cta">
-              <a href="https://buymeacoffee.com/RickardEngberg" target="_blank" rel="noopener"
-                style={{display:'inline-flex',alignItems:'center',gap:6,background:'#FFDD00',color:'#000',fontWeight:700,fontSize:13,padding:'8px 18px',borderRadius:10,textDecoration:'none'}}>
-                ☕ Buy me a coffee
-              </a>
-              <p style={{fontSize:11,color:'#aaa',marginTop:8}}>If you find RunOut useful, consider supporting its development</p>
-            </div>
+            {!IS_IOS && (
+              <div className="footer-cta">
+                <a href="https://buymeacoffee.com/RickardEngberg" target="_blank" rel="noopener"
+                  style={{display:'inline-flex',alignItems:'center',gap:6,background:'#FFDD00',color:'#000',fontWeight:700,fontSize:13,padding:'8px 18px',borderRadius:10,textDecoration:'none'}}>
+                  ☕ Buy me a coffee
+                </a>
+                <p style={{fontSize:11,color:'#aaa',marginTop:8}}>If you find RunOut useful, consider supporting its development</p>
+              </div>
+            )}
           </div>
           {hoverPreview && (
             <div ref={previewRef} className="thumb-preview" style={{left: hoverPreview.x + 24, top: hoverPreview.y + 24}}>
