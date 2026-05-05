@@ -124,6 +124,17 @@ If 4.2 gets cited anyway, point to:
 - The camera permission prompt (live capture, not just a web-loaded page)
 - The barcode-to-search flow (OS-level capability surfaced in the app)
 
+### Published iOS versions log
+
+iOS marketing version can drift ahead of the other platforms when Apple
+review forces a resubmission. Track the running version here so the next
+bump picks up from the right number.
+
+| Version | Date       | Status    | Notes                                                                                  |
+|---------|------------|-----------|----------------------------------------------------------------------------------------|
+| 3.0     | 2026-05-03 | Rejected  | Buy Me a Coffee link on the landing page flagged as alternative-payment reference      |
+| 3.1     | 2026-05-05 | Published | Resubmitted after donation link was hidden for Safari; Android/Windows remain on 3.0   |
+
 ---
 
 ## 3. Microsoft Store (Windows)
