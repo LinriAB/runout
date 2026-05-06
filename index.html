@@ -129,6 +129,18 @@
 
     .connected-msg { text-align: center; font-size: 12px; color: #22c55e; margin-top: 8px; }
     .cache-msg { text-align: center; font-size: 11px; color: #888; margin-top: 4px; }
+    .cache-msg.stale { color: #b45309; font-weight: 600; }
+    .stale-banner {
+      background: #fef3c7; border: 1px solid #fcd34d; border-radius: 10px;
+      padding: 10px 12px; margin-bottom: 14px; font-size: 12px; color: #78350f;
+      display: flex; flex-direction: column; gap: 6px;
+    }
+    .stale-banner strong { color: #78350f; }
+    .stale-banner button {
+      background: #d97706; color: white; border: none; border-radius: 8px;
+      padding: 7px 10px; font-size: 12px; font-weight: 600; cursor: pointer;
+    }
+    .stale-banner button:disabled { opacity: 0.6; cursor: default; }
 
     /* Search */
     .search-tabs { display: flex; gap: 6px; margin-bottom: 10px; }
@@ -572,6 +584,11 @@
     }
 
     [data-theme="dark"] .cache-msg { color: #6e6e76; }
+    [data-theme="dark"] .cache-msg.stale { color: #fbbf24; }
+    [data-theme="dark"] .stale-banner {
+      background: #2a1f0a; border-color: #78350f; color: #fbbf24;
+    }
+    [data-theme="dark"] .stale-banner strong { color: #fcd34d; }
 
     [data-theme="dark"] .search-tab.active { background: #6366f1; }
     [data-theme="dark"] .search-tab:not(.active) { background: #2a2a30; color: #cfcfd6; }
@@ -754,7 +771,11 @@
     const API = "https://api.discogs.com";
     // Bump this when you publish changes you want existing users to see.
     // Keep in sync with CACHE_NAME in sw.js so cached assets update too.
-    const APP_VERSION = 'v44';
+    const APP_VERSION = 'v45';
+    // Show a stale-cache warning if the local Discogs collection mirror
+    // hasn't been refreshed in this many days. Vinyl shopping is mostly
+    // a weekend activity, so 7 nudges users right before they shop again.
+    const STALE_CACHE_DAYS = 7;
     // Backend for personal fields (purchase price, notes, tags). null = feature disabled.
     // Set this to your Worker URL, e.g. "https://runout-api.your-subdomain.workers.dev"
     // or "https://api.runout.io" once a custom route is live.
@@ -2333,6 +2354,17 @@
             {!(activeView === 'collection' && collSidebarHidden) && (
             <aside className="sidebar">
               <div className="sidebar-inner">
+              {connected && cacheInfo && (Date.now() - cacheInfo.ts) > STALE_CACHE_DAYS * 86400000 && (
+                <div className="stale-banner">
+                  <div>
+                    <strong>Your collection cache is {Math.floor((Date.now() - cacheInfo.ts) / 86400000)} days old.</strong>
+                    {' '}Refresh from Discogs to pick up recent adds, edits, and price suggestions.
+                  </div>
+                  <button onClick={handleRefresh} disabled={collLoading}>
+                    {collLoading ? `Refreshing... ${loadProg}` : 'Refresh now'}
+                  </button>
+                </div>
+              )}
               {/* Settings */}
               <div className="card" style={{marginBottom:14}}>
                 <button className="settings-toggle" onClick={() => setSettingsOpen(!settingsOpen)}>
@@ -2349,7 +2381,11 @@
                     <button className="btn-primary" onClick={() => handleConnect()} disabled={!token||collLoading}>
                       {collLoading ? `Loading collection... ${loadProg}` : connected ? `Connected (${collectionRaw.length} records)` : 'Connect & load collection'}
                     </button>
-                    {connected && cacheInfo && <div className="cache-msg">Cached: {cacheInfo.count} records, updated {timeAgo(cacheInfo.ts)}</div>}
+                    {connected && cacheInfo && (
+                      <div className={`cache-msg${(Date.now() - cacheInfo.ts) > STALE_CACHE_DAYS * 86400000 ? ' stale' : ''}`}>
+                        Cached: {cacheInfo.count} records, updated {timeAgo(cacheInfo.ts)}
+                      </div>
+                    )}
                     {connected && <button className="btn-secondary" onClick={handleRefresh} disabled={collLoading}>Refresh collection from Discogs</button>}
                     {connected && <button className="btn-secondary" onClick={handleDisconnect}>Switch account</button>}
                     {connected && <button className="btn-danger" onClick={handleDeleteAccount}>Delete cached data &amp; log out</button>}
