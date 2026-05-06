@@ -8,8 +8,21 @@ export default {
     const url = new URL(request.url);
     const { method } = request;
 
+    // Allowlist must include the Capacitor schemes used by the bundled
+    // iOS/Android apps, otherwise the preflight fails and fetch throws
+    // "Load failed" in WKWebView.
+    const ALLOWED_ORIGINS = new Set([
+      'https://app.runout.io',
+      'https://localhost',     // Android Capacitor (androidScheme: 'https')
+      'capacitor://localhost', // iOS Capacitor
+    ]);
+    const reqOrigin = request.headers.get('Origin') || '';
+    const allowOrigin = ALLOWED_ORIGINS.has(reqOrigin)
+      ? reqOrigin
+      : (env.ALLOWED_ORIGIN || 'https://app.runout.io');
+
     const corsHeaders = {
-      'Access-Control-Allow-Origin': env.ALLOWED_ORIGIN || '*',
+      'Access-Control-Allow-Origin': allowOrigin,
       'Access-Control-Allow-Methods': 'GET, PUT, DELETE, OPTIONS',
       'Access-Control-Allow-Headers': 'Content-Type, Authorization',
       'Access-Control-Max-Age': '86400',
