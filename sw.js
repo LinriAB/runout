@@ -1,4 +1,4 @@
-const CACHE_NAME = 'runout-v42';
+const CACHE_NAME = 'runout-v44';
 const STATIC_ASSETS = [
   './',
   './index.html',
