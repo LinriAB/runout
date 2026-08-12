@@ -19,3 +19,10 @@
 # If you keep the line number information, uncomment this to
 # hide the original source file name.
 #-renamesourcefileattribute SourceFile
+
+# The barcode scanner's Android library annotates its model classes with Gson's
+# @SerializedName but doesn't ship Gson, so R8 fails the release build over the
+# missing class. We never deserialize those models with Gson — Capacitor reads the
+# options straight off the plugin call — and absent annotations are ignored at
+# runtime, so warning about it is enough.
+-dontwarn com.google.gson.annotations.SerializedName

@@ -134,6 +134,7 @@ bump picks up from the right number.
 |---------|------------|-----------|----------------------------------------------------------------------------------------|
 | 3.0     | 2026-05-03 | Rejected  | Buy Me a Coffee link on the landing page flagged as alternative-payment reference      |
 | 3.1     | 2026-05-05 | Published | Resubmitted after donation link was hidden for Safari; Android/Windows remain on 3.0   |
+| 3.2     | 2026-08-12 | Pending   | Barcode scanner fixed on iPhone; Android catches up from 3.0 to 3.2 (versionCode 4)    |
 
 ---
 
