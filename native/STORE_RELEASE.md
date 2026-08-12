@@ -96,7 +96,7 @@ In Android Studio: **Build → Generate Signed App Bundle → AAB**. Output is
 ### Why we added the barcode scanner
 
 Apple's Guideline 4.2 rejects "minimum functionality" apps, including pure
-webview wrappers. The native barcode scanner (via `@capacitor-mlkit/barcode-scanning`)
+webview wrappers. The native barcode scanner (via `@capacitor/barcode-scanner`)
 gives the app a camera-driven feature that couldn't exist in a plain browser —
 that's the argument to make in the review notes.
 

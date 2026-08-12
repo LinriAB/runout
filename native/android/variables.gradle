@@ -1,5 +1,7 @@
 ext {
-    minSdkVersion = 24
+    // 26 (Android 8.0) is the floor required by io.ionic.libs:ionbarcode-android,
+    // pulled in by @capacitor/barcode-scanner.
+    minSdkVersion = 26
     compileSdkVersion = 36
     targetSdkVersion = 36
     androidxActivityVersion = '1.11.0'

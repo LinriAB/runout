@@ -789,20 +789,41 @@
       (/iPad|iPhone|iPod/.test(navigator.userAgent) && !window.MSStream)
     );
 
+    // Barcode scanning is provided by @capacitor/barcode-scanner, which registers
+    // itself natively as "CapacitorBarcodeScanner". The plugin is only present in the
+    // native builds, so the camera button is hidden whenever the bridge doesn't expose it
+    // (a missing plugin used to make the button look enabled but do nothing).
+    function barcodeScannerPlugin() {
+      return (window.Capacitor && window.Capacitor.Plugins && window.Capacitor.Plugins.CapacitorBarcodeScanner) || null;
+    }
+    const CAN_SCAN_BARCODE = IS_NATIVE && !!barcodeScannerPlugin();
+    // CapacitorBarcodeScannerTypeHintALLOption.ALL — accept every supported symbology.
+    const BARCODE_HINT_ALL = 17;
+
     async function scanBarcode() {
-      const BS = window.Capacitor && window.Capacitor.Plugins && window.Capacitor.Plugins.BarcodeScanner;
-      if (!BS) return null;
+      const BS = barcodeScannerPlugin();
+      if (!BS) {
+        alert('Barcode scanning is not available in this version of the app.');
+        return null;
+      }
       try {
-        const perm = await BS.requestPermissions();
-        if (perm && perm.camera !== 'granted' && perm.camera !== 'limited') {
-          alert('Camera permission is required to scan barcodes');
-          return null;
-        }
-        const result = await BS.scan();
-        const code = result && result.barcodes && result.barcodes[0] && result.barcodes[0].rawValue;
-        return code || null;
+        // We call the bridge directly instead of importing the plugin's JS wrapper, so
+        // every option the native side decodes must be passed explicitly — iOS rejects
+        // the call with "Scanning parameters are invalid" if any of them is missing.
+        const result = await BS.scanBarcode({
+          hint: BARCODE_HINT_ALL,
+          scanInstructions: 'Point the camera at the barcode on the record sleeve',
+          scanButton: false,
+          scanText: ' ',
+          cameraDirection: 1, // BACK
+          scanOrientation: 3, // ADAPTIVE
+          android: { scanningLibrary: 'mlkit' }
+        });
+        return (result && result.ScanResult) || null;
       } catch (e) {
-        if (e && e.message && !/cancel/i.test(e.message)) alert('Scan failed: ' + e.message);
+        // OS-PLUG-BARC-0006 is the user tapping cancel — not something to report.
+        const cancelled = (e && e.code === 'OS-PLUG-BARC-0006') || (e && e.message && /cancel/i.test(e.message));
+        if (!cancelled) alert('Scan failed: ' + ((e && e.message) || 'unknown error'));
         return null;
       }
     }
@@ -2437,7 +2458,7 @@
                             } />
                           {query && <button type="button" className="search-clear" onClick={handleClearSearch} aria-label="Clear">×</button>}
                         </div>
-                        {searchType === 'barcode' && IS_NATIVE && (
+                        {searchType === 'barcode' && CAN_SCAN_BARCODE && (
                           <button type="button" className="btn-scan" onClick={async () => {
                             const code = await scanBarcode();
                             if (code) {
